@@ -1,0 +1,99 @@
+{
+  "version": 1,
+  "note": "Models are NOT shipped with the app: the user installs what they need on the AI page (AI-001). Hashes are sha256 of the exact files; licenses allow commercial use.",
+  "models": [
+    {
+      "id": "bg.u2netp",
+      "task": "background",
+      "title": {"ru": "Быстрая (U²-Netp)", "en": "Fast (U²-Netp)"},
+      "description": {"ru": "Мгновенно, но грубо по краям. Подходит для простых картинок и слабых ПК.", "en": "Instant but rough at the edges. Good for simple pictures and weak PCs."},
+      "license": {"name": "Apache-2.0", "url": "https://github.com/xuebinqin/U-2-Net"},
+      "files": [
+        {"path": "bg/u2netp.onnx", "url": "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx", "size": 4574861, "sha256": "309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8"}
+      ],
+      "runtime": {"input_size": 320, "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225], "output": "minmax"}
+    },
+    {
+      "id": "bg.isnet",
+      "task": "background",
+      "title": {"ru": "Быстрая для фото (ISNet)", "en": "Fast for photos (ISNet)"},
+      "description": {"ru": "Чистые края на фотографиях за доли секунды. Рисунки и аниме понимает плохо — для них BiRefNet.", "en": "Clean edges on photos in a fraction of a second. Poor on drawings and anime — use BiRefNet there."},
+      "license": {"name": "Apache-2.0", "url": "https://github.com/xuebinqin/DIS"},
+      "files": [
+        {"path": "bg/isnet-general-use.onnx", "url": "https://github.com/danielgatis/rembg/releases/download/v0.0.0/isnet-general-use.onnx", "size": 178648008, "sha256": "60920e99c45464f2ba57bee2ad08c919a52bbf852739e96947fbb4358c0d964a"}
+      ],
+      "runtime": {"input_size": 1024, "mean": [0.5, 0.5, 0.5], "std": [1.0, 1.0, 1.0], "output": "minmax"}
+    },
+    {
+      "id": "bg.birefnet",
+      "task": "background",
+      "recommended": true,
+      "title": {"ru": "Лучшая (BiRefNet)", "en": "Best (BiRefNet)"},
+      "description": {"ru": "Лучше всех вырезает фото, рисунки и аниме, вплоть до волос. Около 1 ГБ, несколько секунд на картинку.", "en": "Best on photos, drawings and anime, down to single hairs. About 1 GB, a few seconds per picture."},
+      "license": {"name": "MIT", "url": "https://github.com/ZhengPeng7/BiRefNet"},
+      "files": [
+        {"path": "bg/birefnet-general.onnx", "url": "https://github.com/danielgatis/rembg/releases/download/v0.0.0/BiRefNet-general-epoch_244.onnx", "size": 972666916, "sha256": "58f621f00f5d756097615970a88a791584600dcf7c45b18a0a6267535a1ebd3c"}
+      ],
+      "runtime": {"input_size": 1024, "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225], "output": "sigmoid"}
+    },
+    {
+      "id": "segment.sam21-tiny",
+      "task": "segment",
+      "recommended": true,
+      "title": {"ru": "Выбор объекта кликом (SAM 2.1)", "en": "Click to select an object (SAM 2.1)"},
+      "description": {"ru": "Щёлкните по предмету на картинке — программа выделит его целиком. Можно рисовать только его или стереть.", "en": "Click an object in the picture and it is selected whole. Draw only it, or erase it."},
+      "license": {"name": "Apache-2.0", "url": "https://github.com/facebookresearch/sam2"},
+      "files": [
+        {"path": "segment/sam21-tiny/vision_encoder.onnx", "url": "https://huggingface.co/onnx-community/sam2.1-hiera-tiny-ONNX/resolve/main/onnx/vision_encoder.onnx", "size": 354238, "sha256": "4f30aacd3aaefbca81a0b7fe4c1fc96345570ea0a6f80ced599493d1b3be2e8c"},
+        {"path": "segment/sam21-tiny/vision_encoder.onnx_data", "url": "https://huggingface.co/onnx-community/sam2.1-hiera-tiny-ONNX/resolve/main/onnx/vision_encoder.onnx_data", "size": 134084864, "sha256": "e83df9866a5afe68ea7f0f721f18f65137fc3acbf0da1c74e946d363e09c69cc"},
+        {"path": "segment/sam21-tiny/prompt_encoder_mask_decoder.onnx", "url": "https://huggingface.co/onnx-community/sam2.1-hiera-tiny-ONNX/resolve/main/onnx/prompt_encoder_mask_decoder.onnx", "size": 213114, "sha256": "874414704c5d686db7d206a35f6e15d26563d50c8c4468fccc6739bd7e491dcf"},
+        {"path": "segment/sam21-tiny/prompt_encoder_mask_decoder.onnx_data", "url": "https://huggingface.co/onnx-community/sam2.1-hiera-tiny-ONNX/resolve/main/onnx/prompt_encoder_mask_decoder.onnx_data", "size": 20958208, "sha256": "e9874d900dd4134ed60eab1e97910327c2419e0b2954485d8fd6e7f1a1470f47"}
+      ],
+      "runtime": {"input_size": 1024, "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225], "decoder_device": "cpu"}
+    },
+    {
+      "id": "depth.dav2-small",
+      "task": "depth",
+      "recommended": true,
+      "title": {"ru": "Порядок по глубине (Depth Anything V2)", "en": "Depth order (Depth Anything V2)"},
+      "description": {"ru": "Понимает, что дальше, а что ближе: рисунок идёт от дальнего плана к ближнему, как у художника.", "en": "Understands what is far and near: drawing goes from background to foreground, like an artist."},
+      "license": {"name": "Apache-2.0", "url": "https://github.com/DepthAnything/Depth-Anything-V2"},
+      "files": [
+        {"path": "depth/depth-anything-v2-small.onnx", "url": "https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model.onnx", "size": 99060839, "sha256": "afb6a5c28f3b6bf1618c6e43f02073ef9dfdc70e937502d51603e57b0a1df10c"}
+      ],
+      "runtime": {"input_size": 518, "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]}
+    },
+    {
+      "id": "lineart.informative",
+      "task": "lineart",
+      "title": {"ru": "Контуры из фото (Informative Drawings)", "en": "Line art from a photo (Informative Drawings)"},
+      "description": {"ru": "Превращает фото в аккуратный рисунок линиями — для контурного режима и игр с одной ручкой.", "en": "Turns a photo into clean line art — for the outline mode and single-pen games."},
+      "license": {"name": "MIT (код и веса автора; ONNX-выгрузка без отдельной лицензии)", "url": "https://github.com/carolineec/informative-drawings"},
+      "files": [
+        {"path": "lineart/informative-drawings.onnx", "url": "https://huggingface.co/rocca/informative-drawings-line-art-onnx/resolve/main/model.onnx", "size": 17193338, "sha256": "1fef40b8f7126d827e30fbebccf95ae9b0b391795df926bf9366a821bad4f498"}
+      ],
+      "runtime": {"max_side": 1024}
+    },
+    {
+      "id": "inpaint.lama",
+      "task": "inpaint",
+      "title": {"ru": "Стереть лишнее (LaMa)", "en": "Erase unwanted parts (LaMa)"},
+      "description": {"ru": "Убирает выделенный объект, надпись или водяной знак и дорисовывает фон на его месте.", "en": "Removes the selected object, text or watermark and fills the background in its place."},
+      "license": {"name": "Apache-2.0", "url": "https://github.com/advimman/lama"},
+      "files": [
+        {"path": "inpaint/lama-fp32.onnx", "url": "https://huggingface.co/Carve/LaMa-ONNX/resolve/main/lama_fp32.onnx", "size": 208044816, "sha256": "1faef5301d78db7dda502fe59966957ec4b79dd64e16f03ed96913c7a4eb68d6"}
+      ],
+      "runtime": {"input_size": 512, "cpu_only": true}
+    },
+    {
+      "id": "upscale.realesrgan",
+      "task": "upscale",
+      "recommended": true,
+      "title": {"ru": "Увеличение (Real-ESRGAN)", "en": "Upscaling (Real-ESRGAN)"},
+      "description": {"ru": "Делает маленькую картинку крупнее и чётче перед рисунком на большой области. Режимы для фото и для аниме.", "en": "Makes a small picture larger and sharper before drawing on a big area. Photo and anime modes."},
+      "license": {"name": "BSD-3-Clause", "url": "https://github.com/xinntao/Real-ESRGAN"},
+      "archive": {"url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesrgan-ncnn-vulkan-20220424-windows.zip", "size": 45474481, "sha256": "abc02804e17982a3be33675e4d471e91ea374e65b70167abc09e31acb412802d", "extract_to": "upscale/realesrgan-ncnn", "check": ["realesrgan-ncnn-vulkan.exe", "models/realesrgan-x4plus.param", "models/realesrgan-x4plus-anime.param"]},
+      "runtime": {"binary": "realesrgan-ncnn-vulkan.exe", "models": {"photo": "realesrgan-x4plus", "anime": "realesrgan-x4plus-anime"}}
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+name: Ошибка
+description: Программа работает не так, как ожидалось
+labels: ["ошибка"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Спасибо, что сообщаете! Перед отправкой загляните в `docs/FAQ.md` этого репозитория — возможно, решение уже есть.
+        **Не прикладывайте личные данные:** проверьте журнал и скриншоты.
+  - type: textarea
+    id: what
+    attributes:
+      label: Что случилось
+      description: Что вы делали, что ожидали и что получилось.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Как повторить
+      placeholder: |
+        1. Выбрал место …
+        2. Открыл картинку …
+        3. Нажал F3 …
+  - type: dropdown
+    id: place
+    attributes:
+      label: Где рисовали
+      options:
+        - Speed Draw!
+        - Spray Paint!
+        - Draw & Donate
+        - «Нарисуй меня!»
+        - Gartic Phone
+        - Другая программа (укажите какая ниже)
+    validations:
+      required: true
+  - type: input
+    id: program
+    attributes:
+      label: Программа или игра, если «Другая»
+      placeholder: Paint, Paint.NET, Krita…
+  - type: input
+    id: version
+    attributes:
+      label: Версия OlegPainter
+      description: Указана внизу страницы «Помощь».
+      placeholder: "1.4"
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows и масштаб экрана
+      placeholder: Windows 11, 2560×1440, 125 %
+  - type: textarea
+    id: log
+    attributes:
+      label: Журнал
+      description: Страница «Помощь» → «Открыть папку журналов» → последний `session_*.log`. Перетащите файл сюда.
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Скриншоты
+      description: Если можно — до и после рисунка.

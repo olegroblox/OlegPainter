@@ -1,0 +1,13 @@
+PySide6>=6.9,<7
+# Numba 0.65.x rejects NumPy 2.5 at import time; metadata alone misses this.
+numpy>=2.2,<2.5
+Pillow>=11,<13
+opencv-python>=4.10
+scikit-learn>=1.6
+keyboard>=0.13
+pynput>=1.8
+interception-python>=1.13
+pywin32>=306
+windows-capture>=2.0.1,<3
+onnxruntime-directml>=1.24.4  # GPU on any Windows GPU via DirectML, CPU fallback (AI-001)
+numba>=0.61

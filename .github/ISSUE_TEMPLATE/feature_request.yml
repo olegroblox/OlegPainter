@@ -1,0 +1,20 @@
+name: Идея
+description: Предложить новую возможность или игру
+labels: ["идея"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Какую задачу решает идея
+      description: Что сейчас неудобно или невозможно.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Как это могло бы работать
+  - type: input
+    id: target
+    attributes:
+      label: Игра или программа, если идея про неё
+      placeholder: название и ссылка

@@ -1,0 +1,69 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Build outputs (root-anchored: a bare "OlegPainter/" also matched
+# engine/olegpainter/ on Windows' case-insensitive git and silently
+# kept the WHOLE engine out of version control)
+build/
+dist/
+/OlegPainter/
+
+# User data written by the app: sessions, profiles, calibrations, pictures and masks.
+# Personal by nature (and a public repository must never carry it).
+configs/
+
+# Private documents (buyer lists and other personal data) never belong in the project
+*.xlsx
+*.xls
+
+# Internal working material: decisions, plans, research, game notes, probes and
+# the instructions for AI coding agents. Kept locally, never published.
+/internal/
+/AGENTS.md
+
+# Third-party driver installer: added to release builds only, never to the sources
+/drivers/
+
+# Copyrighted picture kept only for local benchmarks
+tools/paint_bench/images/02_sponge.png
+
+# Logs and temp files
+*.log
+*.tmp
+*.bak
+*.last-good
+*.corrupt-*
+*.swp
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Test cache
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+test-results/
+*.egg-info/
+.env
+.env.*
+!.env.example
+
+# Logs and local telemetry (live locally, not in history)
+logs/
+
+# Pre-git backup snapshots (rollback is git now; folders kept as a local safety net)
+_backup_*/
+_proof_*/
+
+# Heavy model binaries (not sources); manifest.json stays versioned
+models/*
+!models/manifest.json

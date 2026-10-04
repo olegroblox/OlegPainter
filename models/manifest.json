@@ -1,0 +1,510 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "id": "bg.u2netp",
+      "task": "background",
+      "provider": "builtin",
+      "title": {
+        "en": "U^2-Net (small)",
+        "ru": "U^2-Net (малый)"
+      },
+      "description": {
+        "en": "Fast background matting model (320px, lightweight).",
+        "ru": "Быстрая модель отделения фона (320px, лёгкая версия)."
+      },
+      "install": {
+        "type": "bundle",
+        "files": [
+          {
+            "path": "bg/u2netp.onnx",
+            "sha256": "309C8469258DDA742793DCE0EBEA8E6DD393174F89934733ECC8B14C76F4DDD8"
+          }
+        ]
+      },
+      "runtime": {
+        "type": "onnx",
+        "normalization": {
+          "mean": [
+            0.485,
+            0.456,
+            0.406
+          ],
+          "std": [
+            0.229,
+            0.224,
+            0.225
+          ]
+        },
+        "input_size": [
+          320,
+          320
+        ]
+      },
+      "extras": {
+        "alias": "u2netp.onnx"
+      }
+    },
+    {
+      "id": "bg.u2net",
+      "task": "background",
+      "provider": "rembg",
+      "title": {
+        "en": "U^2-Net (full)",
+        "ru": "U^2-Net (полный)"
+      },
+      "description": {
+        "en": "Higher quality background removal at the cost of speed.",
+        "ru": "Более качественное удаление фона ценой производительности."
+      },
+      "install": {
+        "type": "download",
+        "files": [
+          {
+            "path": "bg/u2net.onnx",
+            "url": "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx",
+            "size": 175997641,
+            "sha256": "8D10D2F3BB75AE3B6D527C77944FC5E7DCD94B29809D47A739A7A728A912B491"
+          }
+        ]
+      },
+      "runtime": {
+        "type": "onnx",
+        "normalization": {
+          "mean": [
+            0.485,
+            0.456,
+            0.406
+          ],
+          "std": [
+            0.229,
+            0.224,
+            0.225
+          ]
+        },
+        "input_size": [
+          320,
+          320
+        ]
+      },
+      "extras": {
+        "alias": "u2net.onnx"
+      }
+    },
+    {
+      "id": "bg.isnet",
+      "task": "background",
+      "provider": "rembg",
+      "title": {
+        "en": "IS-Net general use",
+        "ru": "IS-Net (универсальный)"
+      },
+      "description": {
+        "en": "High quality matting model for people, products, and objects.",
+        "ru": "Высокое качество отделения фона для людей, предметов и товаров."
+      },
+      "install": {
+        "type": "download",
+        "files": [
+          {
+            "path": "bg/isnet-general-use.onnx",
+            "url": "https://github.com/danielgatis/rembg/releases/download/v0.0.0/isnet-general-use.onnx",
+            "size": 178648008,
+            "sha256": "60920E99C45464F2BA57BEE2AD08C919A52BBF852739E96947FBB4358C0D964A"
+          }
+        ]
+      },
+      "runtime": {
+        "type": "onnx",
+        "normalization": {
+          "mean": [
+            0.485,
+            0.456,
+            0.406
+          ],
+          "std": [
+            0.229,
+            0.224,
+            0.225
+          ]
+        },
+        "input_size": [
+          512,
+          512
+        ]
+      },
+      "extras": {
+        "alias": "isnet-general-use.onnx"
+      }
+    },
+    {
+      "id": "bg.birefnet",
+      "task": "background",
+      "provider": "rembg",
+      "title": {
+        "en": "BiRefNet General (best quality)",
+        "ru": "BiRefNet General (макс. качество)"
+      },
+      "description": {
+        "en": "State-of-the-art high-resolution matting (1024px). Heavy (~928 MB), slowest, sharpest object/background split.",
+        "ru": "SOTA-модель отделения объекта (1024px). Тяжёлая (~928 МБ), самая медленная, самое чёткое разделение объект/фон."
+      },
+      "install": {
+        "type": "download",
+        "files": [
+          {
+            "path": "bg/birefnet-general.onnx",
+            "url": "https://github.com/danielgatis/rembg/releases/download/v0.0.0/BiRefNet-general-epoch_244.onnx",
+            "size": 972666916,
+            "md5": "7a35a0141cbbc80de11d9c9a28f52697"
+          }
+        ]
+      },
+      "runtime": {
+        "type": "onnx",
+        "normalization": {
+          "mean": [
+            0.485,
+            0.456,
+            0.406
+          ],
+          "std": [
+            0.229,
+            0.224,
+            0.225
+          ]
+        },
+        "input_size": [
+          1024,
+          1024
+        ]
+      },
+      "extras": {
+        "alias": "birefnet-general.onnx"
+      }
+    },
+    {
+      "id": "bg.birefnet-lite",
+      "task": "background",
+      "provider": "rembg",
+      "title": {
+        "en": "BiRefNet Lite (high quality)",
+        "ru": "BiRefNet Lite (высокое качество)"
+      },
+      "description": {
+        "en": "SOTA matting with a lighter Swin-Tiny backbone (1024px, ~214 MB). Much better than U2Net at a fraction of the full BiRefNet cost.",
+        "ru": "SOTA-отделение объекта на лёгком бэкбоне Swin-Tiny (1024px, ~214 МБ). Заметно лучше U2Net при доле стоимости полного BiRefNet."
+      },
+      "install": {
+        "type": "download",
+        "files": [
+          {
+            "path": "bg/birefnet-lite.onnx",
+            "url": "https://github.com/danielgatis/rembg/releases/download/v0.0.0/BiRefNet-general-bb_swin_v1_tiny-epoch_232.onnx",
+            "size": 224005088,
+            "md5": "4fab47adc4ff364be1713e97b7e66334"
+          }
+        ]
+      },
+      "runtime": {
+        "type": "onnx",
+        "normalization": {
+          "mean": [
+            0.485,
+            0.456,
+            0.406
+          ],
+          "std": [
+            0.229,
+            0.224,
+            0.225
+          ]
+        },
+        "input_size": [
+          1024,
+          1024
+        ]
+      },
+      "extras": {
+        "alias": "birefnet-lite.onnx"
+      }
+    },
+    {
+      "id": "upscale.realesrgan.x4plus",
+      "task": "upscale",
+      "provider": "builtin",
+      "title": {
+        "en": "Real-ESRGAN x4plus (General)",
+        "ru": "Real-ESRGAN x4plus (общий)"
+      },
+      "description": {
+        "en": "Universal photo upscaling (4×) with good detail retention.",
+        "ru": "Универсальный апскейл фото (4×) с хорошей детализацией."
+      },
+      "install": {
+        "type": "download",
+        "archive_url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesrgan-ncnn-vulkan-20220424-windows.zip",
+        "extract_to": "upscale/realesrgan"
+      },
+      "runtime": {
+        "type": "ncnn",
+        "family": "realesrgan",
+        "binary": "upscale/realesrgan/realesrgan-ncnn-vulkan.exe",
+        "models_dir": "upscale/realesrgan",
+        "model": "realesrgan-x4plus",
+        "scale": 4
+      },
+      "extras": {
+        "alias": "Real-ESRGAN x4plus"
+      }
+    },
+    {
+      "id": "upscale.realesrgan.x4plus-anime",
+      "task": "upscale",
+      "provider": "builtin",
+      "title": {
+        "en": "Real-ESRGAN x4plus Anime",
+        "ru": "Real-ESRGAN x4plus (аниме)"
+      },
+      "description": {
+        "en": "Anime-friendly upscale (4×) tuned for line art.",
+        "ru": "Апскейл 4×, настроенный под аниме и линии."
+      },
+      "install": {
+        "type": "download",
+        "archive_url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesrgan-ncnn-vulkan-20220424-windows.zip",
+        "extract_to": "upscale/realesrgan"
+      },
+      "runtime": {
+        "type": "ncnn",
+        "family": "realesrgan",
+        "binary": "upscale/realesrgan/realesrgan-ncnn-vulkan.exe",
+        "models_dir": "upscale/realesrgan",
+        "model": "realesrgan-x4plus-anime",
+        "scale": 4
+      },
+      "extras": {
+        "alias": "Real-ESRGAN x4plus Anime"
+      }
+    },
+    {
+      "id": "upscale.realesrgan.anime-x2",
+      "task": "upscale",
+      "provider": "builtin",
+      "title": {
+        "en": "Real-ESRGAN AnimeVideo x2",
+        "ru": "Real-ESRGAN AnimeVideo x2"
+      },
+      "install": {
+        "type": "download",
+        "archive_url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesrgan-ncnn-vulkan-20220424-windows.zip",
+        "extract_to": "upscale/realesrgan"
+      },
+      "runtime": {
+        "type": "ncnn",
+        "family": "realesrgan",
+        "binary": "upscale/realesrgan/realesrgan-ncnn-vulkan.exe",
+        "models_dir": "upscale/realesrgan",
+        "model": "realesr-animevideov3-x2",
+        "scale": 2
+      },
+      "extras": {
+        "alias": "AnimeVideo x2"
+      }
+    },
+    {
+      "id": "upscale.realesrgan.anime-x3",
+      "task": "upscale",
+      "provider": "builtin",
+      "title": {
+        "en": "Real-ESRGAN AnimeVideo x3",
+        "ru": "Real-ESRGAN AnimeVideo x3"
+      },
+      "install": {
+        "type": "download",
+        "archive_url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesrgan-ncnn-vulkan-20220424-windows.zip",
+        "extract_to": "upscale/realesrgan"
+      },
+      "runtime": {
+        "type": "ncnn",
+        "family": "realesrgan",
+        "binary": "upscale/realesrgan/realesrgan-ncnn-vulkan.exe",
+        "models_dir": "upscale/realesrgan",
+        "model": "realesr-animevideov3-x3",
+        "scale": 3
+      },
+      "extras": {
+        "alias": "AnimeVideo x3"
+      }
+    },
+    {
+      "id": "upscale.realesrgan.anime-x4",
+      "task": "upscale",
+      "provider": "builtin",
+      "title": {
+        "en": "Real-ESRGAN AnimeVideo x4",
+        "ru": "Real-ESRGAN AnimeVideo x4"
+      },
+      "install": {
+        "type": "download",
+        "archive_url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesrgan-ncnn-vulkan-20220424-windows.zip",
+        "extract_to": "upscale/realesrgan"
+      },
+      "runtime": {
+        "type": "ncnn",
+        "family": "realesrgan",
+        "binary": "upscale/realesrgan/realesrgan-ncnn-vulkan.exe",
+        "models_dir": "upscale/realesrgan",
+        "model": "realesr-animevideov3-x4",
+        "scale": 4
+      },
+      "extras": {
+        "alias": "AnimeVideo x4"
+      }
+    },
+    {
+      "id": "upscale.waifu2x",
+      "task": "upscale",
+      "provider": "nihui",
+      "title": {
+        "en": "waifu2x-ncnn-vulkan",
+        "ru": "waifu2x-ncnn-vulkan"
+      },
+      "description": {
+        "en": "Classic anime upscaler with denoise support.",
+        "ru": "Классический апскейлер с шумодавом для аниме."
+      },
+      "install": {
+        "type": "download",
+        "archive_url": "https://github.com/nihui/waifu2x-ncnn-vulkan/releases/download/20220728/waifu2x-ncnn-vulkan-20220728-windows.zip",
+        "extract_to": "upscale/waifu2x"
+      },
+      "runtime": {
+        "type": "ncnn",
+        "family": "waifu2x",
+        "binary": "upscale/waifu2x/waifu2x-ncnn-vulkan.exe",
+        "models_dir": "upscale/waifu2x/models"
+      }
+    },
+    {
+      "id": "upscale.realsr",
+      "task": "upscale",
+      "provider": "nihui",
+      "title": {
+        "en": "RealSR-ncnn-vulkan",
+        "ru": "RealSR-ncnn-vulkan"
+      },
+      "description": {
+        "en": "RealSR photo upscaler (NCNN).",
+        "ru": "Фотоапскейлер RealSR (NCNN)."
+      },
+      "install": {
+        "type": "download",
+        "archive_url": "https://github.com/nihui/realsr-ncnn-vulkan/releases/download/20221030/realsr-ncnn-vulkan-20221030-windows.zip",
+        "extract_to": "upscale/realsr"
+      },
+      "runtime": {
+        "type": "ncnn",
+        "family": "realsr",
+        "binary": "upscale/realsr/realsr-ncnn-vulkan.exe",
+        "models_dir": "upscale/realsr/models"
+      }
+    },
+    {
+      "id": "upscale.realcugan",
+      "task": "upscale",
+      "provider": "nihui",
+      "title": {
+        "en": "RealCUGAN-ncnn-vulkan",
+        "ru": "RealCUGAN-ncnn-vulkan"
+      },
+      "description": {
+        "en": "RealCUGAN anime/video upscaler with multi-scale models.",
+        "ru": "RealCUGAN — апскейлер для аниме и видео."
+      },
+      "install": {
+        "type": "download",
+        "archive_url": "https://github.com/nihui/realcugan-ncnn-vulkan/releases/download/20220728/realcugan-ncnn-vulkan-20220728-windows.zip",
+        "extract_to": "upscale/realcugan"
+      },
+      "runtime": {
+        "type": "ncnn",
+        "family": "realcugan",
+        "binary": "upscale/realcugan/realcugan-ncnn-vulkan.exe",
+        "models_dir": "upscale/realcugan/models"
+      }
+    },
+    {
+      "id": "face.gfpgan",
+      "task": "upscale",
+      "provider": "TencentARC",
+      "title": {
+        "en": "GFPGAN Face Enhance",
+        "ru": "GFPGAN восстановление лиц"
+      },
+      "description": {
+        "en": "Optional face enhancement pass compatible with Real-ESRGAN.",
+        "ru": "Опциональное восстановление лиц, совместимое с Real-ESRGAN."
+      },
+      "install": {
+        "type": "download",
+        "archive_url": "https://github.com/TencentARC/GFPGAN/releases/download/v1.3.8/GFPGANv1.4.zip",
+        "extract_to": "upscale/gfpgan"
+      },
+      "runtime": {
+        "type": "ncnn",
+        "family": "gfpgan",
+        "binary": "upscale/gfpgan/gfpgan-ncnn-vulkan.exe",
+        "models_dir": "upscale/gfpgan"
+      }
+    },
+    {
+      "id": "outpaint.lama",
+      "task": "outpaint",
+      "provider": "lamacleaner",
+      "title": {
+        "en": "LaMa ONNX",
+        "ru": "LaMa ONNX"
+      },
+      "description": {
+        "en": "Fast edge extension/outpainting (LaMa).",
+        "ru": "Быстрое дорисовывание краёв (LaMa)."
+      },
+      "install": {
+        "type": "download",
+        "files": [
+          {
+            "path": "outpaint/lama/lama-onnx/big-lama-512.onnx",
+            "url": "https://huggingface.co/Carve/LaMa-ONNX/resolve/main/lama_fp32.onnx",
+            "size": 208044816,
+            "sha256": "1FAEF5301D78DB7DDA502FE59966957EC4B79DD64E16F03ED96913C7A4EB68D6"
+          }
+        ]
+      },
+      "runtime": {
+        "type": "onnx",
+        "normalization": {
+          "mean": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "std": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "divisor": 8,
+        "input_size": [
+          512,
+          512
+        ],
+        "model": "outpaint/lama/lama-onnx/big-lama-512.onnx"
+      },
+      "extras": {
+        "alias": "LaMa ONNX (fp32)"
+      }
+    }
+  ]
+}

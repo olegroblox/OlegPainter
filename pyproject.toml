@@ -1,0 +1,7 @@
+[tool.ruff]
+target-version = "py313"
+extend-exclude = ["build", "dist", "models", "logs", "_backup_*", "_proof_*"]
+
+[tool.ruff.lint]
+# Start with actual errors; avoid a noisy, repository-wide style rewrite.
+select = ["E9", "F63", "F7", "F82"]
