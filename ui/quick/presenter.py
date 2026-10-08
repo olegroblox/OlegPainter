@@ -3,10 +3,12 @@ from dataclasses import asdict
 from functools import wraps
 from pathlib import Path
 import ctypes
+import json
 import logging
 import math
 import re
 import sys
+import time
 
 from PySide6.QtCore import QObject, Property, Signal, Slot, QTimer, QUrl, QEvent, Qt, QSettings, QCoreApplication
 from PySide6.QtGui import QKeySequence, QShortcut, QWindow
@@ -24,6 +26,8 @@ from application import image_filters, onboarding
 from application import presets
 from application import support
 from application import image_sources
+from application import updates
+from application.driver_setup import DriverCenter
 from ui.helpers.config_payload import collect_payload, apply_payload, DEFAULT_CATEGORY_IDS, CATEGORY_INFO
 from infrastructure.documents import write_document
 from infrastructure import input_driver
@@ -33,6 +37,7 @@ log = logging.getLogger(__name__)
 
 # Title bar colours (COLORREF 0x00BBGGRR) matching Theme.qml sidebar/text.
 _TITLE_BAR = {True: (0x00212121, 0x00E6E6E6), False: (0x00FAFBFB, 0x001A1A1A)}
+_BRUSH_VIEW_HINT = "Так программа поняла регулятор кисти и место для проб. Если неверно — укажите заново. Щелчок или Esc — закрыть."
 
 
 def open_url(url):
@@ -97,6 +102,8 @@ class Presenter(QObject):
         self._target_chosen = self._shell_settings.value("quick/targetChosen", self._quick_start_seen, type=bool)
         # SETTINGS-004: newcomers see «Основное»; the other groups are one switch away.
         self._advanced_settings = self._shell_settings.value("quick/advancedSettings", False, type=bool)
+        # The quick start sent the user to another page: a way back (audit 2026-10-05).
+        self._quick_start_return = False
         # IMAGE-EDIT-001: what happens to new pictures is the user's choice, kept between runs.
         auto_background = self._shell_settings.value("image/autoBackground", "off", type=str)
         if auto_background in ("off", "auto", "ai"):
@@ -117,8 +124,24 @@ class Presenter(QObject):
         i18n.languageChanged.connect(self._language_changed)
         theme_manager.themeChanged.connect(self._theme_changed)
         self._app_icon_url = QUrl.fromLocalFile(str(get_app_paths().assets_root / "app-icon.png")).toString()
-        self._driver = input_driver.check(get_app_paths().app_root)
+        # DRIVER-002: Interception wherever it is; installed, repaired or removed on request.
+        self._drivers = DriverCenter(get_app_paths().app_root,
+                                     notify=lambda: QTimer.singleShot(0, self, self._driver_changed))
+        self._driver_busy = ""
         self._desktop_capture_return = False
+        # UPDATE-001: the latest release on GitHub, downloaded and installed on request.
+        paths = get_app_paths()
+        self._updates = updates.UpdateCenter(support.APP_VERSION, paths.app_root, frozen=paths.is_frozen,
+                                             notify=lambda: QTimer.singleShot(0, self, self._update_changed))
+        self._update_auto = self._shell_settings.value("updates/autoCheck", True, type=bool)
+        self._update_dismissed = self._shell_settings.value("updates/dismissed", "", type=str)
+        self._update_finished = updates.finished_update
+        if self._update_finished:
+            self._set_message(f"OlegPainter обновлён до версии {support.APP_VERSION}. Настройки на месте.")
+        last_check = self._shell_settings.value("updates/lastCheck", 0.0, type=float)
+        if paths.is_frozen and self._update_auto and time.time() - last_check > updates.CHECK_INTERVAL:
+            # after the window is up: a slow network must not delay the start
+            QTimer.singleShot(8000, self, self._updates.check)
         self._desktop_capture_opened = False
         self._brush_learning_return = False
         self._shortcuts = []
@@ -139,6 +162,7 @@ class Presenter(QObject):
         self.service.aiChanged.connect(self.schedule_refresh)
         self.service.hotkey_action_launcher = self._launch_hotkey_action
         self.service.brushLearningFinished.connect(self._brush_learning_finished)
+        self.service.brushCaptureApplied.connect(self._brush_capture_applied)
         self.refresh()
         self._preview_ready(self.service._last_qimg)
 
@@ -158,6 +182,13 @@ class Presenter(QObject):
     sidebarCollapsed = Property(bool, lambda self: self._sidebar_collapsed, notify=shellChanged)
     alwaysOnTop = Property(bool, lambda self: self._always_on_top, notify=shellChanged)
     quickStartSeen = Property(bool, lambda self: self._quick_start_seen, notify=shellChanged)
+    quickStartReturn = Property(bool, lambda self: self._quick_start_return, notify=shellChanged)
+
+    @Slot(bool)
+    def setQuickStartReturn(self, offered):
+        if self._quick_start_return != bool(offered):
+            self._quick_start_return = bool(offered)
+            self.shellChanged.emit()
     darkTheme = Property(bool, lambda self: theme_manager.theme() != "light", notify=shellChanged)
     language = Property(str, lambda self: i18n.current_language(), notify=shellChanged)
     languageApplied = Signal()
@@ -178,8 +209,11 @@ class Presenter(QObject):
     @report_errors
     def setQualityPreset(self, preset_id):
         """PRESETS-001: «Быстро / Баланс / Точно» change preparation and the colour order only."""
+        was_auto = self.service.auto_colors
         presets.apply(self.controller, preset_id)
         self._set_auto_colors(False)              # the preset's colour count is a choice
+        if was_auto:                              # said aloud: it used to switch off silently
+            self._set_message(f"Цветов теперь {self.service.engine.k_clusters}, как в пресете: «Авто» выключено.")
         self.refresh()
         return True
 
@@ -200,13 +234,19 @@ class Presenter(QObject):
     @report_errors
     def searchImages(self, service_id, query, kind):
         """Open the picture search in the browser; the found picture comes back by drop or copy."""
-        url = image_sources.search_url(service_id, query, kind)
+        url = image_sources.search_url(service_id, query, kind, i18n.current_language())
         if not open_url(url):
             raise RuntimeError("Не удалось открыть браузер. Откройте поиск картинок вручную.")
         self._shell_settings.setValue("quick/imageSearchService", service_id)
         self._shell_settings.setValue("quick/imageSearchKind", kind)
         self._awaiting_image = True
         self._watch_clipboard()
+        # The window is pinned on top and covered the found pictures (live Speed Draw!,
+        # 2026-10-07): step aside while the browser is used, come back with the copied one.
+        window = self._window
+        if window is not None and window.isVisible() and window.visibility() != QWindow.Minimized:
+            self._search_return = True
+            window.showMinimized()
         self.shellChanged.emit()
         self._set_message(translation.text("Найдите картинку и перетащите её в окно OlegPainter "
                                            "или скопируйте: программа предложит её вставить."))
@@ -236,6 +276,11 @@ class Presenter(QObject):
         if offer != self._clipboard_offer:
             self._clipboard_offer = offer
             self.offerChanged.emit()
+            if offer and getattr(self, "_search_return", False) and self._window is not None:
+                self._search_return = False
+                self._window.showNormal()
+                self._window.raise_()
+                self._window.requestActivate()
             if offer and self._window is not None and not self._window.isActive():
                 # Windows keeps the browser in front: flash the taskbar button instead.
                 self._window.alert(0)
@@ -324,20 +369,17 @@ class Presenter(QObject):
         """Mirror the picture itself, so the stencil, preview and drawing stay one image.
 
         The engine's own flip flags are reset by every stencil placement (STENCIL
-        geometry owns the crop); a mirrored copy of the source survives that.
+        geometry owns the crop); a mirrored copy of the source survives that. It is
+        an edit like «Повернуть»: inserting the copy as a new picture lost undo,
+        the inserted original and the removed background.
         """
         self._require_edit()
-        from PIL import Image
-        operation = {"horizontal": Image.Transpose.FLIP_LEFT_RIGHT,
-                     "vertical": Image.Transpose.FLIP_TOP_BOTTOM}.get(direction)
-        if operation is None:
+        if direction not in ("horizontal", "vertical"):
             raise ValueError("Неизвестное направление отражения.")
-        source = getattr(self.service.engine, "source_pil_image", None)
-        if source is None:
+        if getattr(self.service.engine, "source_pil_image", None) is None:
             raise ValueError("Сначала откройте картинку.")
-        if not self.service.paste_image(source.transpose(operation), origin="Отражённая картинка"):
+        if not self.service.apply_filter("flip_" + direction):
             raise RuntimeError("Не удалось отразить картинку.")
-        self._set_message("Картинка отражена.")
         self.schedule_refresh()
         return True
 
@@ -476,18 +518,56 @@ class Presenter(QObject):
     def showCalibration(self):
         """Show on screen every point the program will click, over the target program."""
         self._require_edit()
-        if self.controller.desktop is None:
-            raise RuntimeError("Экранные инструменты не подключены.")
-        items = translation.view(calibration_view.items(self.service))
+        items = calibration_view.items(self.service)
         if not items:
             raise ValueError("Пока нечего показывать: обведите холст и настройте выбор цвета.")
+        self._show_on_screen(items, "Так программа видит ваши настройки. Щелчок или Esc — закрыть.")
+        return True
+
+    @Slot(result=bool)
+    @report_errors
+    def showBrushCalibration(self):
+        """Only the brush control and the test spot: checked before learning clicks them."""
+        self._require_edit()
+        items = calibration_view.brush_items(self.service.engine)
+        if not items:
+            raise ValueError("Сначала укажите регулятор кисти или место для проб.")
+        self._show_on_screen(items, _BRUSH_VIEW_HINT)
+        return True
+
+    def _show_on_screen(self, items, hint):
+        if self.controller.desktop is None:
+            raise RuntimeError("Экранные инструменты не подключены.")
         overlays = self.controller.desktop.desktop_overlays
-        overlays.show_calibration(items, hint=translation.text("Так программа видит ваши настройки. Щелчок или Esc — закрыть."))
+        overlays.show_calibration(translation.view(items), hint=translation.text(hint))
         flash = getattr(overlays, "flash", None)
         if flash is not None and self._window is not None and self._window.isVisible():
             self._window.hide()
             flash.closed.connect(self._calibration_view_closed)
-        return True
+
+    def _brush_capture_applied(self, _kind):
+        # The pick has just closed and the window is still hidden: show what was
+        # understood over the target program (the capture return reopens the window
+        # after it). Queued so that the picker's own closing finishes first.
+        QTimer.singleShot(0, self._show_brush_capture)
+
+    def _show_brush_capture(self):
+        if self.controller._closing or self.controller.desktop is None:
+            return
+        items = calibration_view.brush_items(self.service.engine)
+        if not items:
+            return
+        overlays = self.controller.desktop.desktop_overlays
+        overlays.show_calibration(translation.view(items), hint=translation.text(_BRUSH_VIEW_HINT))
+        flash = getattr(overlays, "flash", None)
+        if flash is None or self._window is None:
+            return
+        # The on-screen check is not a capture mode: without this the pick's return
+        # would bring the window back over the control the check points at (live).
+        self._desktop_capture_return = False
+        if self._window.isVisible():
+            self._window.hide()
+        flash.closed.connect(self._calibration_view_closed)
 
     def _calibration_view_closed(self):
         if self._window is not None and not self.controller._closing:
@@ -537,38 +617,137 @@ class Presenter(QObject):
         open_url(QUrl.fromLocalFile(str(folder)))
         return True
 
+    updateChanged = Signal()
+
+    def _update_changed(self):
+        info = self._updates.snapshot()
+        if info["state"] in ("latest", "available") and not info["error"]:
+            self._shell_settings.setValue("updates/lastCheck", time.time())
+        self.updateChanged.emit()
+
+    def _update_view(self):
+        info = self._updates.snapshot()
+        info.update(auto_check=self._update_auto,
+                    # the banner: a version the user has not put aside with «Не сейчас»
+                    banner=info["state"] in ("available", "ready") and info["latest"] != self._update_dismissed,
+                    finished=bool(self._update_finished))
+        return translation.view(info)
+
+    updateInfo = Property("QVariantMap", lambda self: self._update_view(), notify=updateChanged)
+
+    @Slot(result=bool)
+    @report_errors
+    def checkUpdates(self):
+        """UPDATE-001: ask GitHub for the latest version now."""
+        self._updates.check()
+        return True
+
+    @Slot(bool)
+    def setUpdateAutoCheck(self, enabled):
+        if self._update_auto != bool(enabled):
+            self._update_auto = bool(enabled)
+            self._shell_settings.setValue("updates/autoCheck", self._update_auto)
+            self.updateChanged.emit()
+
+    @Slot(result=bool)
+    @report_errors
+    def downloadUpdate(self):
+        """Download and unpack the new version; from sources or a protected folder
+        the release page opens instead (the files cannot be swapped there)."""
+        if not self._updates.can_install:
+            return self.openUpdatePage()
+        self._updates.download()
+        return True
+
+    @Slot()
+    def cancelUpdate(self):
+        self._updates.cancel()
+
+    @Slot(result=bool)
+    @report_errors
+    def installUpdate(self):
+        """Hand over to the downloaded version and close: it swaps the files and opens itself."""
+        self._require_edit()
+        if not self._updates.install():
+            raise RuntimeError("Обновление ещё не готово к установке.")
+        return self.closeApplication()
+
+    @Slot(result=bool)
+    @report_errors
+    def openUpdatePage(self):
+        open_url(self._updates.snapshot()["page_url"])
+        return True
+
+    @Slot()
+    def dismissUpdate(self):
+        latest = self._updates.snapshot()["latest"]
+        if latest and self._update_dismissed != latest:
+            self._update_dismissed = latest
+            self._shell_settings.setValue("updates/dismissed", latest)
+            self.updateChanged.emit()
+
     driverChanged = Signal()
-    inputDriver = Property("QVariantMap", lambda self: dict(state=self._driver.state,
-                                                            ready=self._driver.ready,
-                                                            can_install=bool(self._driver.installer)),
-                           notify=driverChanged)
+    inputDriver = Property("QVariantMap", lambda self: translation.view(self._drivers.snapshot()), notify=driverChanged)
+
+    # What «Проверить снова» says: a silent check looked as if the button did nothing.
+    _DRIVER_STATES = {
+        "ready": ("Драйвер управления мышью работает.", False),
+        "no_mouse": ("Драйвер работает, но не видит ни одной мыши. Переподключите мышь или перезагрузите компьютер.", True),
+        "pending_removal": ("Драйвер удалён и работает до перезагрузки компьютера.", False),
+        "reboot": ("Драйвер установлен — перезагрузите компьютер, чтобы он заработал.", True),
+        "blocked": ("Windows не запустила драйвер после перезагрузки. Подробности — на странице «Помощь».", True),
+        "unreachable": ("Драйвер запущен, но OlegPainter не может к нему подключиться. Перезапустите программу.", True),
+        "incomplete": ("Драйвер установлен не полностью — нажмите «Починить» на странице «Помощь».", True),
+        "broken": ("Драйвер повреждён! Не перезагружайте компьютер — почините или удалите его на странице «Помощь».", True),
+        "missing": ("Драйвер пока не найден. Если вы его только что установили — перезагрузите компьютер.", True),
+    }
+
+    def _driver_changed(self):
+        info = self._drivers.snapshot()
+        if self._driver_busy and not info["busy"] and info["message"]:
+            # The job ended while the user may be on another page: its result goes to the message line too.
+            self._set_message(info["message"], info["error"])
+        self._driver_busy = info["busy"]
+        self.driverChanged.emit()
 
     @Slot(str, result=bool)
     @report_errors
     def driverAction(self, command):
-        """DRIVER-001: install/uninstall (bundled installer, UAC) or open the author's page; recheck.
-        QML asks for an informed yes first: the driver is third-party and may misbehave."""
-        if command == "install":
-            if self._driver.installer:
-                if not input_driver.run_installer(self._driver.installer):
-                    raise RuntimeError("Установка не началась: подтвердите запрос Windows «Разрешить изменения» или запустите установщик вручную.")
-                self._set_message("Установщик запущен. Когда он закончит, перезагрузите компьютер.")
-            else:
-                open_url(input_driver.OFFICIAL_PAGE)
-                self._set_message("Скачайте Interception.zip, распакуйте, запустите «command line installer\\install-interception.exe /install» от имени администратора и перезагрузите компьютер.")
-        elif command == "uninstall":
-            if self._driver.installer:
-                if not input_driver.run_installer(self._driver.installer, "uninstall"):
-                    raise RuntimeError("Удаление не началось: подтвердите запрос Windows «Разрешить изменения» или запустите установщик вручную.")
-                self._set_message("Удаление драйвера запущено. Когда установщик закончит, перезагрузите компьютер.")
-            else:
-                open_url(input_driver.OFFICIAL_PAGE)
-                self._set_message("Запустите «install-interception.exe /uninstall» от имени администратора и перезагрузите компьютер.")
+        """DRIVER-002: install / repair / uninstall with the author's installer (QML asks for an
+        informed yes first), the restart they need, and the places Windows keeps its side of it."""
+        if command in ("install", "repair", "uninstall"):
+            state = self.controller.state
+            if state.drawing_busy or state.brush_learning:
+                raise RuntimeError("Сначала остановите рисование или обучение кисти: во время них драйвер не меняют.")
+            if not self._drivers.change(command):
+                raise RuntimeError("Драйвер уже меняется — дождитесь окончания.")
+            # Set here, not from the queued notification: a quick job can end before it arrives.
+            self._driver_busy = command
         elif command == "recheck":
-            self._driver = input_driver.check(get_app_paths().app_root)
-            self.driverChanged.emit()
-            if self._driver.ready:
-                self._set_message("Драйвер управления мышью работает.")
+            state = self._drivers.recheck()
+            if state == "unsupported":
+                self._set_message("На этом компьютере драйвер Interception не работает." if self._drivers.status.detail
+                                  else "")
+            elif state == "missing" and self._drivers.status.hvci:
+                self._set_message("Драйвер не установлен, а установить его нельзя, пока включена «Целостность памяти».", True)
+            else:
+                self._set_message(*self._DRIVER_STATES[state])
+        elif command == "restart":
+            # Windows ends the program on restart without the usual save on close.
+            self.controller.save()
+            self._drivers.schedule_restart()
+            self._set_message(self._drivers.message)
+        elif command == "cancel_restart":
+            self._drivers.cancel_restart()
+            self._set_message(self._drivers.message)
+        elif command == "show_files":
+            self._drivers.show_files()
+        elif command == "core_isolation":
+            self._drivers.open_core_isolation()
+        elif command == "restore_point":
+            self._drivers.open_restore_points()
+        elif command == "page":
+            open_url(input_driver.OFFICIAL_PAGE)
         else:
             raise ValueError("Неизвестная команда драйвера.")
         return True
@@ -614,6 +793,10 @@ class Presenter(QObject):
     @Slot(bool)
     def setQuickStartSeen(self, seen):
         if self._quick_start_seen != seen:
+            if seen and not self._quick_start_seen:
+                # Whoever started with the quick start already has this version: «Что нового»
+                # (against 1.3) at the next launch meant nothing to a newcomer. It stays in «Помощь».
+                self._shell_settings.setValue("quick/whatsNewSeen", support.APP_VERSION)
             self._quick_start_seen = seen
             self._shell_settings.setValue("quick/quickStartSeen", seen)
             self.shellChanged.emit()
@@ -645,9 +828,11 @@ class Presenter(QObject):
         self._custom_target = ""
         self._shell_settings.setValue("quick/customTarget", "")
         # A Roblox place always re-applies its colour method; "other" keeps the
-        # method the user already chose for the universal profile.
-        if target["id"] != "other" or self.controller.state.preparation.current_place_id != target["place"]:
-            self.controller.profiles.select(target["place"], None)
+        # method the user already chose for the universal profile, once set up.
+        profiles = self.controller.profiles
+        if (target["id"] != "other" or self.controller.state.preparation.current_place_id != target["place"]
+                or not profiles.is_set_up(target["place"])):
+            profiles.select(target["place"], None)
         from application.place_catalog import PLACE_PRESETS
         if PLACE_PRESETS.get(target["place"], {}).get("snapshot_cutout") and not self._shell_settings.contains("image/autoBackground"):
             # A place drawn from screenshots of a character suggests removing their
@@ -665,11 +850,10 @@ class Presenter(QObject):
     @Slot(str, result=bool)
     @report_errors
     def quickStartAction(self, code):
-        if code == "open_brush":
-            self.pageRequested.emit(5)
-            return True
-        if code == "open_palette":
-            self.pageRequested.emit(4)
+        pages = {"open_brush": 5, "open_palette": 4, "open_sequences": 6}
+        if code in pages:
+            self.setQuickStartReturn(True)
+            self.pageRequested.emit(pages[code])
             return True
         if code == "learn_speed":
             return self.brushCommand("learn_speed")
@@ -712,6 +896,8 @@ class Presenter(QObject):
         data.update(phase=state.drawing.value, run_id=state.run_id, can_start=state.can_start,
                     closing=state.closing, close_error=self.controller._close_error,
                     close_phase=self.controller._close_phase,
+                    # the session could not be written: offer to close anyway
+                    close_save_failed=not state.closing and self.controller._close_exception is not None,
                     can_edit=state.can_edit_source, capture=state.capture.to_payload(),
                     desktop_mode=state.desktop_mode,
                     next_step=preparation_step(state, self.service),
@@ -730,7 +916,8 @@ class Presenter(QObject):
                                     method=self.service.background_method,
                                     auto_new=self.service.auto_background,
                                     busy=self.service.background_busy,
-                                    has_original=self.service.has_picture_edits),
+                                    has_original=self.service.has_picture_edits,
+                                    transparent=self.service.picture_has_transparency()),
                     edits=dict(self.service.edit_history(), busy=self.service.edit_busy),
                     filters=image_filters.catalog(),
                     places=[dict(id=p["id"], label=tr(p["key"])) for p in PLACE_OPTIONS if p["id"] != LEGACY_SCREEN_PLACE],
@@ -740,14 +927,21 @@ class Presenter(QObject):
                              for d in HOTKEY_DEFINITIONS],
                     bindings={key: value for group in profile.values() for key, value in group.items()},
                     manual_palette=self.service.manual_palette_snapshot(),
+                    colour_parts=onboarding.colour_parts(self.service),
+                    hex_opened_by_actions=bool(config.get("hex_field_opened_by_actions")),
                     hsv_direction=str(getattr(self.service.engine, "palette_rotation_direction_calib", "ccw") or "ccw"),
                     outline_fill=calibration_view.outline_fill(self.service),
                     area_rect=calibration_view.area_rect(self.service),
                     manual_mix=self.service.manual_mix_snapshot(),
                     input_sequences=self.service.input_sequences_snapshot(),
-                    brush={key: list(value) if isinstance(value, tuple) else value
-                           for key, value in self.service.engine.get_dynamic_brush_settings().items()
-                           if key not in ("profile", "calibration", "cached_calibration")},
+                    brush=dict({key: list(value) if isinstance(value, tuple) else value
+                                for key, value in self.service.engine.get_dynamic_brush_settings().items()
+                                if key not in ("profile", "calibration", "cached_calibration")},
+                               # learning switches to a probe colour itself only with a calibrated colour method
+                               probe_colour_auto=bool(self.service.engine._dynamic_brush_can_pick_calibration_color()),
+                               # why «Обучить» / «Подобрать скорость» are grey: a disabled button shows no hint
+                               learn_blocker=self.service.brush_learning_blocker("brush"),
+                               speed_blocker=self.service.brush_learning_blocker("speed")),
                     brush_learning=self.service.brush_learning_snapshot(),
                     ai=dict(self.service.ai.snapshot(i18n.current_language()),
                             has_original=self.service.ai_has_original()),
@@ -857,6 +1051,10 @@ class Presenter(QObject):
                             "define_manual_palette", "define_app_layers",
                             "record_pre_color_actions", "record_post_color_actions"):
                 self._require_edit()
+            if code in ("select_area", "edit_stencil") and not self.controller.state.preparation.image_loaded:
+                # The area is placed with the picture as a stencil: hiding the window for
+                # nothing ended in «Область выбрана», although nothing was selected.
+                raise RuntimeError(tr("status_open_image_first"))
             if code == "start_pause":
                 self._step_aside_for_drawing()
             if code in self._SCREEN_TOOL_ACTIONS and self.controller.desktop is not None:
@@ -876,6 +1074,8 @@ class Presenter(QObject):
         command = step["action"]
         if command == "open_palette":
             self.pageRequested.emit(4)
+        elif command == "open_brush":
+            self.pageRequested.emit(5)
         elif command == "finish_capture":
             capture = self.controller.state.capture
             if capture.kind == "palette":
@@ -906,6 +1106,8 @@ class Presenter(QObject):
     def setSetting(self, key, value):
         apply_setting(self.controller, key, value)
         if key == "k_clusters":
+            if self.service.auto_colors:
+                self._set_message("Число цветов задано вручную: «Авто» выключено.")
             self._set_auto_colors(False)          # a count typed by the user is kept
         self.refresh()
         return True
@@ -967,7 +1169,7 @@ class Presenter(QObject):
         if self._window is not None:
             self._window.show()
             self._window.requestActivate()
-        self._set_message("Обучите кисть, затем переключитесь в целевую программу и запустите рисунок.")
+        self._set_message("Обучите кисть, затем переключитесь в программу рисования и запустите рисунок.")
 
     @Slot("QVariantMap", result=bool)
     @report_errors
@@ -1025,8 +1227,11 @@ class Presenter(QObject):
         """The start button is pressed in this window, which usually covers the
         canvas (and may be pinned on top): minimise it for the drawing."""
         window = self._window
-        if (window is None or self.controller.desktop is None or self.controller.state.drawing.value != "idle"
-                and not self.controller.state.drawing.terminal):
+        drawing = self.controller.state.drawing
+        # «Продолжить» after a pause steps aside too: the window stayed over the canvas
+        # and the drawing paused itself at once (live Draw & Donate, 2026-10-08).
+        if (window is None or self.controller.desktop is None
+                or drawing.value not in ("idle", "paused") and not drawing.terminal):
             return
         if window.isVisible() and window.visibility() != QWindow.Minimized:
             self._drawing_return = True
@@ -1086,6 +1291,9 @@ class Presenter(QObject):
             self.service.cancel_brush_learning()
         elif command in ("learn", "learn_speed"):
             self._require_edit()
+            blocker = self.service.brush_learning_blocker("speed" if command == "learn_speed" else "brush")
+            if blocker:
+                raise RuntimeError(blocker)
             self._brush_learning_return = self._window is not None and self._window.isVisible()
             if self._brush_learning_return:
                 self._window.showMinimized()
@@ -1341,7 +1549,9 @@ class Presenter(QObject):
                     raise ValueError("В профиле нет поддерживаемых настроек.")
                 payload = {"painter": payload}
             results = apply_payload(self.service, payload, settings_page=self.controller.profiles)
-            failures = [f"{section}: {message}" for section, (ok, message) in results.items() if not ok]
+            sections = {"painter": "параметры рисования", "image": "картинка", "hotkeys": "горячие клавиши",
+                        "place": "место и способ цвета"}
+            failures = [f"{sections.get(section, section)} — {message}" for section, (ok, message) in results.items() if not ok]
             if failures:
                 self.controller.refresh_preparation()
                 self.refresh()
@@ -1377,7 +1587,11 @@ class Presenter(QObject):
     @report_errors
     def importPreset(self, url):
         self._require_edit()
-        descriptor = self.controller.config_store.import_external(self._local_path(url))
+        try:
+            descriptor = self.controller.config_store.import_external(self._local_path(url))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            # «Expecting value: line 1 column 1 (char 0)» told the user nothing.
+            raise ValueError("Файл не похож на профиль OlegPainter: выберите файл .json, сохранённый кнопкой «Экспорт».") from error
         self.refreshPresets()
         self._set_message("Импортирован профиль: " + descriptor.name)
         return True
@@ -1467,6 +1681,18 @@ class Presenter(QObject):
                     self.refresh()
                 return True
         return super().eventFilter(obj, event)
+
+    @Slot(result=bool)
+    @report_errors
+    def closeWithoutSaving(self):
+        """After a failed save the window stayed open with only «retry»: the user
+        could not leave without the task manager (audit 2026-10-05)."""
+        self.cancelRecording()
+        closed = self.controller.close(save=False, wait=False)
+        self.refresh()
+        if closed:
+            self._refresh_timer.stop()
+        return closed
 
     @Slot(result=bool)
     @report_errors

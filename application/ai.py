@@ -157,7 +157,7 @@ class AiCenter:
                 self._set_message("Установка отменена. Скачанная часть сохранена — можно продолжить позже.")
             except Exception as exc:
                 log.warning("Model install failed: %s", model_id, exc_info=True)
-                self._set_message(f"Не удалось установить модель: {exc}", error=True)
+                self._set_message(_install_error_text(exc), error=True)
             finally:
                 with self._lock:
                     self._installs.pop(model_id, None)
@@ -338,6 +338,7 @@ class AiCenter:
             "device": self.prefs.device,
             "device_used": device,
             "gpu_name": gpu.name if gpu and directml_available() else "",
+            "gpu_memory_gb": round(gpu.memory_mb / 1024, 1) if gpu and directml_available() else 0,
             "background_model": self.background_model() or "",
             "depth_order": self.prefs.depth_order,
             "models": models,
@@ -372,6 +373,19 @@ _DONE_TEXT = {
     "flatten": "Картинка упрощена.",
     "depth": "",
 }
+
+
+def _install_error_text(exc: Exception) -> str:
+    """Why a model did not install, in plain words: «<urlopen error …>» told nothing."""
+    import urllib.error
+    if isinstance(exc, urllib.error.HTTPError):
+        return f"Сервер с моделью ответил ошибкой {exc.code}. Попробуйте позже — скачанная часть сохранится."
+    if isinstance(exc, (urllib.error.URLError, TimeoutError, ConnectionError)):
+        return ("Не удалось скачать модель: нет связи с сервером. Проверьте интернет и нажмите «Установить» "
+                "ещё раз — скачанная часть сохранится.")
+    if isinstance(exc, OSError) and getattr(exc, "errno", None) == 28:
+        return "Не удалось сохранить модель: на диске не хватает места."
+    return f"Не удалось установить модель: {_readable(exc)}"
 
 
 def _readable(exc: Exception) -> str:

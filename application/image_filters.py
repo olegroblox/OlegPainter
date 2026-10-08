@@ -127,6 +127,10 @@ def _rotate(image):
     return image.convert("RGBA").transpose(Image.Transpose.ROTATE_270)      # clockwise
 
 
+def _flip(image, transpose):
+    return image.convert("RGBA").transpose(transpose)
+
+
 def _trim(image):
     """Cut transparent margins, so the object fills the drawing area."""
     rgba = image.convert("RGBA")
@@ -153,6 +157,10 @@ FILTERS: dict[str, tuple[str, str, str, Callable[[Image.Image], Image.Image]]] =
     "blur": ("filters", "Размыть", "Смягчить мелкие детали и шум", _blur),
     "sharpen": ("filters", "Резче", "Чётче края и мелкие детали", _sharpen),
     "rotate": ("shape", "Повернуть", "Повернуть по часовой стрелке на 90°", _rotate),
+    "flip_horizontal": ("shape", "Отразить по горизонтали", "Зеркально: левая и правая стороны меняются местами",
+                        lambda i: _flip(i, Image.Transpose.FLIP_LEFT_RIGHT)),
+    "flip_vertical": ("shape", "Отразить по вертикали", "Зеркально: верх и низ меняются местами",
+                      lambda i: _flip(i, Image.Transpose.FLIP_TOP_BOTTOM)),
     "trim": ("shape", "Обрезать пустые края", "После удаления фона фигура займёт всю область рисования", _trim),
 }
 

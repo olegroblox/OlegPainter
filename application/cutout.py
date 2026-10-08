@@ -38,6 +38,43 @@ def _palette(lab: np.ndarray, k: int = 8) -> np.ndarray:
     return centres
 
 
+def _clean_edges(rgb: np.ndarray, keep: np.ndarray, scale: float) -> np.ndarray:
+    """The working mask is coarse: a line of the horizon stuck to the head stayed,
+    and so did a rim of mixed pixels along the outline (grass green around a black
+    sweater), which the palette then took as a colour of its own and outlined the
+    whole figure with it (live «Нарисуй меня!», 2026-10-07). Open the mask by one
+    working pixel, then drop rim pixels nearer in colour to the background around
+    the object than to the object itself."""
+    import cv2
+    from scipy import ndimage
+    h, w = keep.shape
+    r = max(1, int(round(1 / scale)))
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1))
+    opened = cv2.morphologyEx(keep.astype(np.uint8), cv2.MORPH_OPEN, kernel).astype(bool)
+    labels, count = ndimage.label(opened)
+    if not count:
+        return keep
+    sizes = ndimage.sum(opened, labels, range(1, count + 1))
+    opened = np.isin(labels, [i + 1 for i, size in enumerate(sizes) if size >= MIN_PART * sizes.max()])
+    inner = ndimage.binary_erosion(opened, iterations=3 * r)
+    outside = ndimage.binary_dilation(opened, iterations=3 * r) & ~ndimage.binary_dilation(opened, iterations=r)
+    rim = opened & ~inner
+    if not inner.any() or not outside.any() or not rim.any():
+        return opened
+    # Object colours from deeper inside: a rim a little wider than the band would
+    # otherwise bring its own colour into the object's palette.
+    deep = ndimage.binary_erosion(opened, iterations=5 * r)
+    lab = _lab(rgb).reshape(h, w, 3)
+    background, colours = _palette(lab[outside]), _palette(lab[deep if deep.any() else inner])
+    pixels = lab[rim]
+    to_background = np.min(np.linalg.norm(pixels[:, None] - background[None], axis=2), axis=1)
+    to_object = np.min(np.linalg.norm(pixels[:, None] - colours[None], axis=2), axis=1)
+    rows, cols = np.nonzero(rim)
+    drop = to_background < to_object
+    opened[rows[drop], cols[drop]] = False
+    return opened
+
+
 def object_mask(rgb: np.ndarray) -> np.ndarray:
     """Boolean object mask (True = keep) for an RGB array."""
     import cv2
@@ -88,9 +125,11 @@ def object_mask(rgb: np.ndarray) -> np.ndarray:
                 keep |= region
 
     full = cv2.resize(keep.astype(np.uint8) * 255, (w, h), interpolation=cv2.INTER_LINEAR) > 127
+    full = _clean_edges(rgb, full, scale)
     share = float(full.mean())
     if share < 0.02 or share > 0.98:
-        raise ValueError("Не удалось отделить объект от фона: обведите его рамкой поплотнее.")
+        raise ValueError("Не удалось отделить объект от фона. У снимка экрана обведите объект поплотнее, "
+                         "иначе попробуйте «Нейросетью» или «По цвету».")
     return full
 
 

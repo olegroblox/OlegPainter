@@ -22,7 +22,7 @@ ColumnLayout {
         Repeater {
             model: [ {title:qsTr("Изображение"), detail:qsTr("Открыть файл"), icon:"image", done:workspace.state.image_loaded},
                      {title:qsTr("Область"), detail:qsTr("Выделить на экране"), icon:"crop", done:workspace.state.area_selected && !workspace.state.area_stale, size: workspace.state.area_rect ? workspace.state.area_rect[2] + " × " + workspace.state.area_rect[3] + " px" : ""},
-                     {title:qsTr("Цвет"), detail:qsTr("Настроить метод"), icon:"palette", done:workspace.state.required_calibrations.length === 0} ]
+                     {title:qsTr("Цвет"), detail:qsTr("Настроить выбор цвета"), icon:"palette", done:workspace.state.required_calibrations.length === 0} ]
             delegate: Button {
                 id: step
                 required property var modelData
@@ -60,11 +60,14 @@ ColumnLayout {
         id: canvasCard
         Layout.fillWidth: true
         // Wide windows fit the preview above the fixed controls; tiny windows scroll.
-        Layout.preferredHeight: Math.max(workspace.narrow ? 230 : 200, workspace.availableHeight - steps.implicitHeight - setup.implicitHeight - 24)
+        // Never shorter than its own rows: at 960 × 640 the wrapped buttons hung below the card.
+        Layout.preferredHeight: Math.max(canvasHeader.implicitHeight + canvasTools.implicitHeight + previewSurface.Layout.minimumHeight + 20 + topPadding + bottomPadding,
+                                         workspace.availableHeight - steps.implicitHeight - setup.implicitHeight - 24)
         padding: workspace.narrow ? 10 : 16
         ColumnLayout {
             anchors.fill: parent; spacing: 10
             RowLayout {
+                id: canvasHeader
                 Layout.fillWidth: true
                 Label { visible: !workspace.narrow; text: qsTr("Холст"); font.pixelSize: 14; font.weight: Font.DemiBold; color: Theme.text; Layout.fillWidth: true }
                 Rectangle {
@@ -108,10 +111,23 @@ ColumnLayout {
                 id: previewSurface; objectName: "previewSurface"
                 Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: 100
                 imageObjectName: "previewImage"
-                source: workspace.showOriginal ? workspace.backend.sourceUrl : workspace.backend.previewUrl
+                // Until the result is ready the picture itself is shown: an empty «Результат»
+                // right after opening a picture looked as if it had not loaded.
+                readonly property bool waiting: !workspace.showOriginal && !workspace.backend.previewUrl && !!workspace.backend.sourceUrl
+                source: workspace.showOriginal || waiting ? workspace.backend.sourceUrl : workspace.backend.previewUrl
                 // VIEWER-001: a click opens the picture to zoom in and compare
                 pickEnabled: previewSurface.source.toString() !== ""
-                onPicked: workspace.viewRequested(workspace.showOriginal)
+                onPicked: workspace.viewRequested(workspace.showOriginal || waiting)
+                Label {
+                    objectName: "previewWaiting"
+                    visible: previewSurface.waiting
+                    anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter; anchors.bottomMargin: 14
+                    width: Math.min(implicitWidth, parent.width - 28); wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter
+                    padding: 8; leftPadding: 12; rightPadding: 12; color: Theme.text; font.pixelSize: 12
+                    background: Rectangle { color: Theme.surface; radius: 8; opacity: 0.92; border.color: Theme.border }
+                    text: !workspace.state.area_selected ? qsTr("Это картинка. Обведите на экране место рисования — здесь появится результат.")
+                        : workspace.state.preview_busy ? qsTr("Подготавливаем результат…") : qsTr("Результат появится после подготовки.")
+                }
                 ColumnLayout {
                     anchors.centerIn: parent; width: Math.min(320, parent.width - 24); spacing: 10
                     visible: previewSurface.source.toString() === ""
@@ -125,6 +141,7 @@ ColumnLayout {
                 }
             }
             Flow {
+                id: canvasTools
                 Layout.fillWidth: true; spacing: 6
                 ActionButton { objectName: "openButton"; iconName: "image"; text: qsTr("Открыть"); shortcutText: workspace.width > 850 ? (workspace.state.bindings.open_file || "") : ""; enabled: workspace.state.can_edit; onClicked: workspace.backend.action("open_file") }
                 ActionButton { iconName: "paste"; text: workspace.narrow ? "" : qsTr("Из буфера"); shortcutText: workspace.width > 850 ? (workspace.state.bindings.paste_clipboard || "") : ""; hint: qsTr("Вставить картинку, файл или ссылку из буфера"); enabled: workspace.state.can_edit; onClicked: workspace.backend.action("paste_clipboard") }

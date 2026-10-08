@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 from PIL import Image
 from PySide6.QtCore import QObject, QUrl
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QGuiApplication, QWindow
 from PySide6.QtQuick import QQuickItem
 
 from application import image_sources
@@ -56,6 +56,8 @@ def test_search_opens_large_pictures_of_the_chosen_kind():
     # A service without the filter gets the words in the query instead.
     pinterest = parse_qs(urlsplit(image_sources.search_url("pinterest", "кот", "transparent")).query)
     assert pinterest["q"] == ["кот png без фона"]
+    english = parse_qs(urlsplit(image_sources.search_url("pinterest", "cat", "transparent", "en")).query)
+    assert english["q"] == ["cat transparent png"]       # no Russian words in an English search
     for service in image_sources.SEARCH_SERVICES:
         assert image_sources.search_url(service["id"], "a", "any").startswith("https://")
     with pytest.raises(ValueError):
@@ -173,11 +175,15 @@ def test_search_opens_the_browser_and_offers_the_copied_picture(quick, monkeypat
     monkeypatch.setattr(presenter_module, "open_url", lambda url: opened.append(url) or True)
     monkeypatch.setattr(web_image, "fetch_image", lambda url: (png_bytes((7, 7)), url))
     assert presenter.imageSearch["service"] == "yandex"
+    window.showNormal()
     assert presenter.searchImages("google", "котик", "clipart")
     assert opened and "google.com" in opened[0]
     assert presenter.imageSearch["service"] == "google" and presenter.imageSearch["kind"] == "clipart"
+    # the pinned window steps aside for the browser and comes back with the copied picture
+    assert presenter._search_return
     QGuiApplication.clipboard().setText("https://site.ru/found.png")
     pump(lambda: presenter.clipboardOffer)
+    assert not presenter._search_return and window.visibility() != QWindow.Minimized
     offer = window.findChild(QQuickItem, "clipboardOffer")
     pump(lambda: offer.isVisible())
     assert presenter.acceptClipboardOffer()

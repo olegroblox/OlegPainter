@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('setup', 'doctor', 'context', 'check', 'test', 'preview-overlays', 'run', 'quick', 'build')]
+    [ValidateSet('setup', 'doctor', 'context', 'check', 'test', 'preview-overlays', 'run', 'quick', 'fresh', 'build', 'package', 'publish')]
     [string]$Task = 'doctor',
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$ExtraArgs = @()
@@ -22,6 +22,9 @@ function Invoke-Python {
 $oldQtPlatform = $env:QT_QPA_PLATFORM
 $oldPluginAutoload = $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD
 $oldPythonEncoding = $env:PYTHONIOENCODING
+$oldConfigDir = $env:OLEGPAINTER_CONFIG_DIR
+$oldTelemetryDir = $env:OLEGPAINTER_TELEMETRY_DIR
+$oldDriverPreview = $env:OLEGPAINTER_DRIVER_PREVIEW
 Push-Location $projectRoot
 try {
     $env:PYTHONIOENCODING = 'utf-8'
@@ -60,11 +63,35 @@ try {
         'preview-overlays' { Invoke-Python -Arguments (@('tools/preview_overlays.py') + $ExtraArgs) }
         'run' { Invoke-Python -Arguments (@('main.py') + $ExtraArgs) }
         'quick' { Invoke-Python -Arguments (@('quick_main.py') + $ExtraArgs) }
+        'fresh' {
+            # The first start of a new user: empty settings in a throwaway folder, the real
+            # configs and window settings untouched. "fresh nodriver" also shows the program
+            # as on a computer without Interception, without touching the installed driver.
+            $trial = Join-Path $env:TEMP 'OlegPainter-fresh'
+            if (Test-Path -LiteralPath $trial) { Remove-Item -LiteralPath $trial -Recurse -Force }
+            $env:OLEGPAINTER_CONFIG_DIR = Join-Path $trial 'configs'
+            $env:OLEGPAINTER_TELEMETRY_DIR = Join-Path $trial 'telemetry'
+            $rest = @($ExtraArgs | Where-Object { $_ -ne 'nodriver' })
+            if ($ExtraArgs -contains 'nodriver') { $env:OLEGPAINTER_DRIVER_PREVIEW = 'missing' }
+            Write-Host "Trial run in $trial. Close the usual OlegPainter window first: only one copy runs."
+            Invoke-Python -Arguments (@('quick_main.py') + $rest)
+        }
         'build' { Invoke-Python -Arguments (@('-m', 'PyInstaller', 'OlegPainter.spec') + $ExtraArgs) }
+        # The archive a release carries: the program finds updates by its name (UPDATE-001).
+        'package' { Invoke-Python -Arguments (@('tools/package_release.py') + $ExtraArgs) }
+        'publish' {
+            # Lint and document links first: a broken copy must not reach GitHub.
+            Invoke-Python -Arguments @('-m', 'ruff', 'check', '.')
+            Invoke-Python -Arguments @('tools/check_docs.py')
+            Invoke-Python -Arguments (@('tools/publish_public.py') + $ExtraArgs)
+        }
     }
 } finally {
     $env:QT_QPA_PLATFORM = $oldQtPlatform
     $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD = $oldPluginAutoload
     $env:PYTHONIOENCODING = $oldPythonEncoding
+    $env:OLEGPAINTER_CONFIG_DIR = $oldConfigDir
+    $env:OLEGPAINTER_TELEMETRY_DIR = $oldTelemetryDir
+    $env:OLEGPAINTER_DRIVER_PREVIEW = $oldDriverPreview
     Pop-Location
 }

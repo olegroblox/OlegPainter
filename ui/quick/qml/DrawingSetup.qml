@@ -64,7 +64,21 @@ Card {
         // PRESETS-001: «Быстро / Баланс / Точно» right where the picture is prepared.
         ColumnLayout {
             Layout.fillWidth: true
-            Label { text: qsTr("Качество"); color: Theme.muted; font.pixelSize: 12 }
+            // The descriptions of the presets lived only on «Настройки»: here on hover.
+            RowLayout {
+                spacing: 4
+                Label { text: qsTr("Качество"); color: Theme.muted; font.pixelSize: 12 }
+                Glyph {
+                    objectName: "qualityInfo"
+                    name: "info"; width: 13; height: 13; color: Theme.muted
+                    HoverHandler { id: qualityHover }
+                    HelpTip {
+                        visible: qualityHover.hovered
+                        text: (setup.backend.qualityPresets || []).map(p => p.label + " — " + p.detail).join("\n")
+                              + "\n" + qsTr("Пресет задаёт и число цветов: «Авто» при этом выключается.")
+                    }
+                }
+            }
             ChoiceBox {
                 objectName: "drawingQuality"
                 Layout.fillWidth: true
@@ -87,7 +101,7 @@ Card {
                 objectName: "drawingCalibration"
                 Layout.fillWidth: true
                 Layout.minimumWidth: implicitWidth  // the choice boxes elide; this caption must not
-                text: setup.state.required_calibrations.length ? qsTr("Настроить цвет") : qsTr("Калибровка ✓")
+                text: setup.state.required_calibrations.length ? qsTr("Настроить цвет") : qsTr("Цвет настроен ✓")
                 enabled: setup.state.can_edit
                 onClicked: setup.calibrationRequested()
             }

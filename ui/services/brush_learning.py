@@ -78,6 +78,7 @@ class BrushLearningMixin:
         vertices only when the program connects points itself, small pen steps
         when it only stamps where it samples the cursor."""
         engine = self.engine
+        engine.input_timing_measured = True
         engine.draw_delay = float(timing["draw_delay"])
         engine.pen_max_step = int(timing["pen_max_step"])
         engine.area_fill_delay = 0.0
@@ -146,6 +147,7 @@ class BrushLearningMixin:
         self._brush_learning_message = self._brush_learning_error = ""
         self.brushLearningChanged.emit()
         self._emit_dynamic_brush_settings_changed()
+        self.brushCaptureApplied.emit(kind)
 
     @staticmethod
     def _brush_rect(value):
@@ -169,31 +171,54 @@ class BrushLearningMixin:
         """Measure the input pacing in the test zone without a brush size control."""
         return self.start_brush_learning(mode="speed")
 
-    def start_brush_learning(self, mode="brush"):
+    def brush_learning_blocker(self, mode="brush"):
+        """Why learning (`brush`) or the speed probe (`speed`) cannot start now, in
+        the user's words; "" when it can. The window asks before it steps aside:
+        minimised for an error, it hid the very message (2026-10-05)."""
+        problem = self._brush_learning_problem(mode)
+        return problem[1] if problem else ""
+
+    def _brush_learning_problem(self, mode):
+        """(exception type, message) or None: a busy program is a RuntimeError, a
+        missing setup a ValueError."""
         if self.brush_learning_active:
-            raise RuntimeError("Обучение кисти уже выполняется.")
+            return RuntimeError, "Обучение кисти уже выполняется."
         if (self._is_shutting_down or self._close_pending or self._is_drawing
                 or self._worker_thread is not None or self._stop_pending
-                or self._preview_thread is not None or self._preview_pending is not None
                 or self._compute_capture_state()["active"] or self.desktop_interaction or self._hotkey_capture_active):
-            raise RuntimeError("Сначала завершите текущую операцию.")
+            return RuntimeError, "Сначала завершите текущую операцию."
+        if self._preview_thread is not None or self._preview_pending is not None:
+            return RuntimeError, "Подождите: картинка ещё готовится."
         engine = self.engine
-        self._brush_rect(engine.draw_region)
-        if engine.dynamic_brush_scratch_zone is None:
-            raise ValueError("Выделите свободное место на холсте для пробных мазков (шаг 2).")
-        self._brush_rect(engine.dynamic_brush_scratch_zone)
+        try:
+            self._brush_rect(engine.draw_region)
+        except ValueError:
+            return ValueError, "Сначала обведите на экране холст — кнопка «Область» на странице «Рисование»."
+        try:
+            self._brush_rect(engine.dynamic_brush_scratch_zone)
+        except ValueError:
+            return ValueError, ("Сначала выделите свободное место на холсте для пробных мазков."
+                                if engine.dynamic_brush_scratch_zone is None
+                                else "Место для проб слишком маленькое: выделите его заново, не меньше 4 × 4 пикселей.")
         if mode == "brush" and not engine._dynamic_brush_control_ready():
-            raise ValueError("Сначала укажите регулятор размера кисти.")
+            return ValueError, "Сначала укажите регулятор размера кисти."
         if (mode == "brush" and engine.dynamic_brush_control_mode == "text" and not engine.dynamic_brush_text_auto
                 and engine.dynamic_brush_min_value < .001):
-            raise ValueError("Для текстового поля задайте положительный минимальный размер кисти.")
+            return ValueError, "Для текстового поля задайте положительный минимальный размер кисти."
+        return None
+
+    def start_brush_learning(self, mode="brush"):
+        problem = self._brush_learning_problem(mode)
+        if problem:
+            raise problem[0](problem[1])
+        engine = self.engine
         config = self.snapshot_painter_config()
         self._brush_settings_before = deepcopy(engine.get_dynamic_brush_settings())
         self._brush_config_before = deepcopy(config)
         job = BrushLearningJob(config, mode=mode)
         self._brush_job = job
-        self._brush_learning_message = ("Подбираем скорость на тестовой зоне…" if mode == "speed"
-                                        else "Обучаем кисть на тестовой зоне…")
+        self._brush_learning_message = ("Подбираем скорость в месте для проб…" if mode == "speed"
+                                        else "Обучаем кисть в месте для проб…")
         self._brush_learning_error = ""
         self._hotkey_capture_epoch += 1
         if getattr(self, "_brush_poll_timer", None) is None:
@@ -243,6 +268,7 @@ class BrushLearningMixin:
             elif getattr(job, "mode", "brush") == "speed":
                 self._input_timing_note = ""
                 if isinstance(job.timing, dict) and "stroke_gap" in job.timing:
+                    self.engine.input_timing_measured = True
                     self.set_pen_stroke_gap(float(job.timing["stroke_gap"]))
                     # the probe drew without settle pauses: each one cost 2 waits per stroke
                     self.set_pen_settle_delay(0.0)

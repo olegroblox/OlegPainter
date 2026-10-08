@@ -134,6 +134,10 @@ class ApplicationController(QObject):
         if self._restored:
             return False
         restored = self.session.restore()
+        if not restored:
+            # First launch: the start place gets the settings recommended for every
+            # place (PRESET-BASE-001) instead of the neutral engine defaults.
+            self.profiles.select(self.profiles.place_id, None)
         self._restored = True
         self.refresh_preparation()
         return restored

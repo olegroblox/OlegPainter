@@ -5,6 +5,8 @@ Rectangle {
     property alias source: image.source
     property alias imageObjectName: image.objectName
     property bool pickEnabled: false
+    // A click usually opens the picture to look at it; picking a point shows the cross.
+    property int pickCursor: Qt.PointingHandCursor
     signal picked(real x, real y)
     color: Theme.background
     radius: 12
@@ -22,7 +24,7 @@ Rectangle {
             anchors.centerIn: parent
             width: image.paintedWidth; height: image.paintedHeight
             enabled: surface.pickEnabled && image.status === Image.Ready
-            cursorShape: enabled ? Qt.CrossCursor : Qt.ArrowCursor
+            cursorShape: enabled ? surface.pickCursor : Qt.ArrowCursor
             onClicked: function(mouse) { surface.picked(mouse.x / width, mouse.y / height) }
         }
     }

@@ -86,8 +86,7 @@ def items(service):
     except Exception:
         brush = {}
     if brush.get("enabled"):
-        _point(result, brush.get("coord"), "Размер")
-        _rect(result, brush.get("scratch_zone"), "Пробы")
+        result += brush_items(engine)
     if getattr(engine, "draw_with_layers_enabled", False):
         for index, coord in enumerate(list(getattr(engine, "target_app_layer_coords", None) or [])[:30]):
             _point(result, coord, f"Слой {index + 1}")
@@ -105,6 +104,33 @@ def items(service):
         if tools["mode"] == "coords":
             _point(result, tools["brush_coord"], "Кисть")
             _point(result, tools["fill_coord"], "Заливка")
+    return result
+
+
+def brush_items(engine):
+    """The brush size control and the test spot as learning will use them: shown
+    right after they are picked, so a wrong frame is seen before learning clicks."""
+    try:
+        brush = engine.get_dynamic_brush_settings()
+    except Exception:
+        return []
+    result = []
+    mode = str(brush.get("control_mode") or "text")
+    if mode == "slider":
+        slider = brush.get("slider_params")
+        if isinstance(slider, (list, tuple)) and len(slider) >= 4:
+            fixed, one, zero = (int(round(float(value))) for value in slider[1:4])
+            if str(slider[0] or "").lower() == "vertical":
+                result.append({"type": "line", "x1": fixed, "y1": one, "x2": fixed, "y2": zero, "label": "Ползунок кисти"})
+            else:
+                result.append({"type": "line", "x1": zero, "y1": fixed, "x2": one, "y2": fixed, "label": "Ползунок кисти"})
+    elif mode == "points":
+        for point in brush.get("points") or []:
+            if isinstance(point, dict) and point.get("x") is not None and point.get("y") is not None:
+                _point(result, (point["x"], point["y"]), f"Размер {float(point.get('value', 0)):g}")
+    else:
+        _point(result, brush.get("coord"), "Размер")
+    _rect(result, brush.get("scratch_zone"), "Пробы")
     return result
 
 

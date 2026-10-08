@@ -41,6 +41,7 @@ class ImageEditsMixin:
     _edit_job = None                     # token of a filter running in a worker
     auto_background = "off"              # what happens to new pictures: off / auto / ai
     auto_colors = False                  # new pictures get their colour count (COLORS-AUTO-001)
+    auto_colors_limit = 0                # the place's cap on that count, 0 = none (timed rounds)
     _colors_pending = False              # a new picture waits for its colour count
     _insert_note = ""                    # what the last new picture got, for the caller's message
 
@@ -68,6 +69,18 @@ class ImageEditsMixin:
     @property
     def has_picture_edits(self) -> bool:
         return self._picture_original is not None and self._picture_edited
+
+    def picture_has_transparency(self) -> bool:
+        """Transparent places are never drawn: a cut-out or a «без фона» picture must
+        not be described as «Фон рисуется вместе с картинкой»."""
+        source = getattr(self.engine, "source_pil_image", None)
+        if not isinstance(source, Image.Image) or "A" not in source.getbands():
+            return False
+        cached = getattr(self, "_transparency_cache", None)
+        if cached is None or cached[0] is not source:
+            cached = (source, source.getchannel("A").getextrema()[0] < 128)
+            self._transparency_cache = cached
+        return cached[1]
 
     def edit_history(self) -> dict:
         return dict(can_undo=bool(self._history) and not self.edit_busy,
@@ -107,6 +120,8 @@ class ImageEditsMixin:
             self.set_mode("bw")
             return "bw", count
         self.set_mode("color")
+        if self.auto_colors_limit:
+            count = min(count, self.auto_colors_limit)
         if int(getattr(self.engine, "k_clusters", 0) or 0) != count:
             self.set_k_clusters(count)
         return "color", count

@@ -1,4 +1,4 @@
-"""«Нарисуй меня!» (Roblox): place preset, snapshot cutout, stop handling (2026-10-01 live tests)."""
+﻿"""«Нарисуй меня!» (Roblox): place preset, snapshot cutout, stop handling (2026-10-01 live tests)."""
 import os
 
 import numpy as np
@@ -38,6 +38,24 @@ def test_cutout_keeps_the_player_and_drops_sky_grass_and_platform():
         cut_out(Image.new("RGB", (10, 10), "white"))
 
 
+def test_cutout_drops_horizon_line_and_grass_rim_of_a_large_snapshot():
+    """Live 2026-10-07: a 1062 px snapshot kept a thin horizon line stuck to the head
+    and a rim of grass green that became a palette colour outlining the player."""
+    grass, sky = (70, 200, 70), (90, 170, 245)
+    img = Image.new("RGB", (600, 1000), sky)
+    d = ImageDraw.Draw(img)
+    d.rectangle((0, 500, 600, 1000), grass)
+    d.line([(0, 300), (600, 300)], (150, 210, 250), 2)                  # horizon line behind the head
+    d.rectangle((200, 150, 400, 900), (15, 15, 15))                     # black body
+    d.rectangle((196, 520, 199, 900), (55, 160, 55))                    # mixed rim on the grass side
+    out = np.asarray(cut_out(img))
+    alpha = out[..., 3] > 0
+    assert alpha[500, 300]
+    assert not alpha[300, 20:180].any() and not alpha[300, 420:580].any()
+    rim = out[520:900, 190:200]
+    assert not (rim[..., 3] > 0).any()
+
+
 def test_draw_me_place_sets_wheel_nudge_and_cell(controllers):
     controller = controllers()
     controller.profiles.select("draw_me", None)
@@ -48,12 +66,23 @@ def test_draw_me_place_sets_wheel_nudge_and_cell(controllers):
     assert config["drawing_algorithm"] == "line_cover"
 
 
+def test_draw_me_caps_the_automatic_colour_count_to_fit_the_round(controllers, monkeypatch):
+    controller = controllers()
+    service = controller.service
+    monkeypatch.setattr(service, "recommend_color_count", lambda: {"count": 14, "mode": "color"})
+    controller.profiles.select("draw_me", None)
+    assert service.apply_recommended_colors() == ("color", 8)
+    controller.profiles.select("speed_draw", None)
+    assert service.apply_recommended_colors() == ("color", 14)
+
+
 def test_quick_start_offers_the_screenshot_first_for_draw_me():
     from types import SimpleNamespace
     prep = SimpleNamespace(current_method_id="wheel_square", current_place_id="draw_me", image_loaded=False,
                            area_selected=False, area_stale=False, required_calibrations=("wheel_square",),
                            can_start=False)
-    service = SimpleNamespace(get_hotkeys=lambda: {}, engine=SimpleNamespace(wheel_square_calib=None))
+    service = SimpleNamespace(get_hotkeys=lambda: {}, engine=SimpleNamespace(
+        wheel_square_calib=None, _should_play_actions=lambda _slot: False))
     view = onboarding.build(SimpleNamespace(preparation=prep), service, brush_ready=False)
     steps = {s["id"]: s for s in view["steps"]}
     assert view["target"] == "draw_me"

@@ -17,6 +17,8 @@ _DIR = Path(__file__).with_name("i18n")
 _table: dict[str, str] = {}
 # Keys that start a longer message ("Неизвестная команда: <code>").
 _prefixes: list[tuple[str, str]] = []
+# Keys that end one (". Отмена сохраняет прежние настройки."): messages glued from parts.
+_suffixes: list[tuple[str, str]] = []
 
 
 # Messages with numbers inside ("пауза на повороте 0.1 мс"): regex, replacement.
@@ -38,11 +40,14 @@ def _engine_pairs(language: str) -> dict[str, str]:
 
 
 def activate(language: str) -> None:
-    global _table, _prefixes, _patterns
+    global _table, _prefixes, _suffixes, _patterns
     data = load(language)
     patterns = data.pop("__patterns__", [])
     _table = {**(_engine_pairs(language) if data else {}), **data}
     _prefixes = sorted(((k, v) for k, v in _table.items() if k.endswith((": ", ":  "))),
+                       key=lambda item: -len(item[0]))
+    _suffixes = sorted(((k, v) for k, v in _table.items()
+                        if k.startswith((". ", ", ", ": ", " ")) and k.endswith(".") and len(k) > 3),
                        key=lambda item: -len(item[0]))
     _patterns = [(re.compile(pattern), replacement) for pattern, replacement in patterns]
 
@@ -60,9 +65,17 @@ def text(source):
         return "• " + text(source[2:])
     if source.endswith(" ✓") and source[:-2] in _table:  # a done step keeps its mark
         return _table[source[:-2]] + " ✓"
+    if source.endswith(".") and source[:-1] in _table:  # a label closed into a sentence
+        found = _table[source[:-1]]
+        return found if found.endswith(".") else found + "."
+    # A message glued from parts («Готово: Сепия. Отменить — Ctrl+Z…»): every part is
+    # translated, not only the first one (it left «Done: Сепия…» in English).
     for key, value in _prefixes:
-        if source.startswith(key):
-            return value + source[len(key):]
+        if source.startswith(key) and len(source) > len(key):
+            return value + text(source[len(key):])
+    for key, value in _suffixes:
+        if source.endswith(key) and len(source) > len(key):
+            return text(source[:-len(key)]) + value
     result = source
     for pattern, replacement in _patterns:
         result = pattern.sub(replacement, result)

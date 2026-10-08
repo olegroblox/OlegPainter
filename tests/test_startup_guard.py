@@ -1,11 +1,10 @@
-"""STARTUP-001 / DRIVER-001: one running copy, a visible start failure, driver state."""
+"""STARTUP-001: one running copy and a visible start failure (the driver: test_input_driver)."""
 import time
 import uuid
 from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
-from infrastructure import input_driver
 from infrastructure.single_instance import SingleInstance
 
 _app = QApplication.instance() or QApplication([])
@@ -61,19 +60,24 @@ def test_second_process_is_turned_away_and_first_window_is_asked_to_show():
         first.release()
 
 
-def test_driver_state_distinguishes_missing_reboot_and_ready(tmp_path, monkeypatch):
-    monkeypatch.setattr(input_driver.os, "name", "nt")
-    assert input_driver.check(tmp_path, devices_open=lambda: True, service_registered=lambda: True).state == "ready"
-    # Installed by the installer but Windows loads the filter drivers only after a reboot.
-    status = input_driver.check(tmp_path, devices_open=lambda: False, service_registered=lambda: True)
-    assert status.state == "reboot" and not status.ready
-    status = input_driver.check(tmp_path, devices_open=lambda: False, service_registered=lambda: False)
-    assert status.state == "missing" and status.installer == ""
-    installer = tmp_path / input_driver.INSTALLER_RELATIVE
-    installer.parent.mkdir(parents=True)
-    installer.write_bytes(b"MZ")
-    status = input_driver.check(tmp_path, devices_open=lambda: False, service_registered=lambda: False)
-    assert status.installer == str(installer)
+def test_trial_run_keeps_window_settings_out_of_the_registry(tmp_path):
+    """dev.ps1 fresh: with OLEGPAINTER_CONFIG_DIR the window's own settings (quick start
+    seen, chosen program) go to that folder too — a first run that changes nothing real."""
+    import os
+    import subprocess
+    import sys
+    code = ("import os, sys; sys.path.insert(0, os.getcwd()); import quick_main\n"
+            "from PySide6.QtCore import QCoreApplication, QSettings\n"
+            "assert quick_main._isolate_trial_settings()\n"
+            "app = QCoreApplication([]); app.setOrganizationName('OlegPainter'); app.setApplicationName('OlegPainter')\n"
+            "settings = QSettings(); settings.setValue('quick/quickStartSeen', True); settings.sync()\n"
+            "print(settings.fileName())\n")
+    env = dict(os.environ, OLEGPAINTER_CONFIG_DIR=str(tmp_path / "configs"))
+    result = subprocess.run([sys.executable, "-c", code], cwd=str(Path(__file__).resolve().parents[1]), env=env,
+                            capture_output=True, text=True, timeout=90)
+    assert result.returncode == 0, result.stderr
+    stored = Path(result.stdout.strip().splitlines()[-1])
+    assert stored.is_file() and tmp_path in stored.parents
 
 
 def test_failed_start_shows_a_message_with_the_session_log(monkeypatch):

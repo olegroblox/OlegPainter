@@ -1,6 +1,8 @@
 """Native Qt Quick entry point during the verified presentation migration."""
 import logging
+import os
 import sys
+from pathlib import Path
 from infrastructure.window_sampling import dispatch_worker
 if __name__ == "__main__":
     dispatch_worker()
@@ -26,6 +28,20 @@ def _show_window(window):
     window.requestActivate()
 
 
+def _isolate_trial_settings():
+    """OLEGPAINTER_CONFIG_DIR (dev.ps1 fresh) runs the program as on its first start:
+    the window's own settings — quick start seen, chosen program, updates — go to an
+    INI file in that folder instead of the user's registry, so nothing real changes."""
+    folder = os.environ.get("OLEGPAINTER_CONFIG_DIR", "").strip()
+    if not folder:
+        return None
+    from PySide6.QtCore import QSettings
+    path = str(Path(folder) / "settings")
+    QSettings.setDefaultFormat(QSettings.IniFormat)
+    QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, path)
+    return path
+
+
 def _startup_failed(error):
     """STARTUP-001: the windowed EXE has no console, so a failed start must be visible."""
     log.exception("Startup failed")
@@ -37,9 +53,15 @@ def _startup_failed(error):
 
 def main():
     configure_application_logging()
+    if _isolate_trial_settings():
+        log.info("Trial run: settings in %s", os.environ["OLEGPAINTER_CONFIG_DIR"])
     _configure_high_dpi()
     QQuickStyle.setStyle("Basic")
-    app = QApplication(sys.argv)
+    # UPDATE-001: started by the installer of a new version — note it, clean up the download.
+    from application import updates
+    from app_paths import get_app_paths
+    argv = updates.finish_on_start(sys.argv, get_app_paths().app_root)
+    app = QApplication(argv)
     app.setOrganizationName("OlegPainter")
     app.setApplicationName("OlegPainter")
     _apply_app_font(app)

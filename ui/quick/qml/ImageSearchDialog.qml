@@ -77,7 +77,7 @@ SurfaceDialog {
             }
             Label {
                 Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font.pixelSize: 12
-                text: qsTr("Поиск откроется в браузере, сразу с большими картинками. Понравившуюся картинку перетащите в окно OlegPainter или нажмите на ней правой кнопкой → «Копировать картинку»: программа сама предложит её вставить. Дальше её можно обрезать, убрать фон и выбрать качество.")
+                text: qsTr("Поиск откроется в браузере, сразу с большими картинками. Понравившуюся картинку перетащите в окно OlegPainter или нажмите на ней правой кнопкой → «Копировать картинку»: программа сама предложит её вставить. Дальше можно убрать фон в «Обработке», обрезать края в трафарете (Alt+F2) и выбрать качество.")
             }
             Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.border }
             Label { text: qsTr("Уже есть ссылка на картинку?"); font.weight: Font.DemiBold; Layout.fillWidth: true; wrapMode: Text.WordWrap }
@@ -96,6 +96,13 @@ SurfaceDialog {
                     enabled: linkField.text.trim() !== "" && dialog.backend.view.can_edit
                     onClicked: if (dialog.backend.openImageUrl(linkField.text)) { linkField.text = ""; dialog.close() }
                 }
+            }
+            // The status line is under the dimmed backdrop: a refused link says why right here.
+            Label {
+                objectName: "imageSearchError"
+                visible: dialog.opened && dialog.backend.messageError && dialog.backend.message !== ""
+                Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.danger; font.pixelSize: 12
+                text: dialog.backend.message
             }
         }
     }

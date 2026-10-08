@@ -5,7 +5,8 @@ from copy import deepcopy
 from PySide6.QtCore import QObject, Signal
 
 from application.place_catalog import (
-    PLACE_OPTIONS, PLACE_PRESETS, ALGORITHM_DISPLAY_KEYS, LEGACY_SCREEN_PLACE, resolve_algorithm,
+    PLACE_OPTIONS, PLACE_PRESETS, ALGORITHM_DISPLAY_KEYS, LEGACY_SCREEN_PLACE, recommended_profile,
+    resolve_algorithm,
 )
 from ui.i18n import tr
 
@@ -43,6 +44,10 @@ class ProfileController(QObject):
         preset = PLACE_PRESETS[self._place_id]
         self._algorithm = current if current in preset["algorithms"] else preset["default_algo"]
         self._profiles: dict[str, dict] = {}
+        # Places the user has set up (chosen, or restored from a session). The start
+        # place is not one of them: a newcomer's first choice still gets the
+        # recommended settings, even when it is «Другая программа» itself.
+        self._set_up: set[str] = set()
         self._transition = False
         service.configLoaded.connect(self._on_config_loaded)
 
@@ -91,7 +96,11 @@ class ProfileController(QObject):
         for key, value in legacy.items():
             restored.setdefault(key, value)
         self._profiles = restored
+        self._set_up.update(key.split("::", 1)[0] for key in restored if "::" in key)
         self.sessionProfilesChanged.emit(deepcopy(restored))
+
+    def is_set_up(self, place_id: str) -> bool:
+        return place_id in self._set_up
 
     def available_place_options(self):
         return [{**deepcopy(item), "label": tr(item["key"])} for item in PLACE_OPTIONS]
@@ -125,19 +134,20 @@ class ProfileController(QObject):
             raise ValueError("Unknown place: " + place_id)
         preset = PLACE_PRESETS[place_id]
         selected = resolve_algorithm(algorithm) if algorithm is not None else self._algorithm
-        first_visit = place_id != self._place_id and not any(
-            key.startswith(place_id + "::") for key in self._profiles)
-        if algorithm is None and first_visit:
+        changed_place = place_id != self._place_id
+        # The first choice of a place sets it up; reselecting the start place with
+        # its route (the controller at launch) does not.
+        setup = place_id not in self._set_up and (changed_place or algorithm is None)
+        if algorithm is None and setup:
             selected = preset["default_algo"]       # a place starts with the route measured for it
         if selected not in preset["algorithms"]:
             if algorithm is not None:
                 raise ValueError("Unsupported algorithm: " + selected)
             selected = preset["default_algo"]
-        if (place_id, selected) == (self._place_id, self._algorithm):
+        if (place_id, selected) == (self._place_id, self._algorithm) and not setup:
             self._apply_selection()
             return
         self.capture()
-        changed_place = place_id != self._place_id
         self._place_id, self._algorithm = place_id, selected
         self._transition = True
         try:
@@ -145,19 +155,24 @@ class ProfileController(QObject):
                 option = next(item for item in PLACE_OPTIONS if item["id"] == place_id)
                 self.service.load_config_by_place(option["file"])
             profile = deepcopy(self._profiles.get(self.profile_key(place_id, selected), {}))
-            if not profile and changed_place and hasattr(self.service, "default_profile_state"):
-                # first visit: start clean instead of inheriting the previous place
+            if (setup or (not profile and changed_place)) and hasattr(self.service, "default_profile_state"):
+                # first visit: start clean instead of inheriting the previous place,
+                # from the settings recommended for every place (PRESET-BASE-001)
                 profile = self.service.default_profile_state()
+                profile.update(recommended_profile(place_id))
             profile.update(drawing_algorithm=selected, color_picking_method=preset["method_id"])
             if len(profile) > 2:
                 self.service.apply_profile_state(profile)
             self._apply_selection()
         finally:
             self._transition = False
+        self._set_up.add(place_id)
         self.placeStateChanged.emit(self.export_place_state())
 
     def _apply_selection(self, method=None):
         method = method or PLACE_PRESETS[self._place_id]["method_id"]
+        # A timed place keeps the automatic colour count of new pictures in its round.
+        self.service.auto_colors_limit = int(PLACE_PRESETS[self._place_id].get("auto_colors_limit", 0))
         config = self.service.snapshot_painter_config()
         for key, value in PLACE_PRESETS[self._place_id].get("settings", {}).items():
             if config.get(key) != value:
@@ -175,7 +190,7 @@ class ProfileController(QObject):
 
     def apply_place_state(self, state):
         if not isinstance(state, dict):
-            raise ValueError("Place state must be an object")
+            raise ValueError("место рисования записано в непонятном виде")
         place_id = self._resolve_legacy_place(state)
         legacy_screen = place_id == LEGACY_SCREEN_PLACE
         if legacy_screen:
@@ -186,10 +201,10 @@ class ProfileController(QObject):
             index = state.get("algo_index")
             selected = algorithms[index] if type(index) is int and 0 <= index < len(algorithms) else self._algorithm
         if selected not in algorithms:
-            raise ValueError("Unsupported saved algorithm: " + selected)
+            raise ValueError("маршрута «" + selected + "» нет у этого места")
         method = state.get("method_id") or ("screen_palette" if legacy_screen else PLACE_PRESETS[place_id]["method_id"])
         if method not in METHOD_LABELS:
-            raise ValueError("Unsupported saved colour method: " + str(method))
+            raise ValueError("неизвестный способ выбора цвета «" + str(method) + "»")
         self._transition = True
         try:
             # Restoring selection must not load a preset or overwrite restored painter/image data.
@@ -200,6 +215,7 @@ class ProfileController(QObject):
             self._apply_selection(method)
         finally:
             self._transition = False
+        self._set_up.add(place_id)
         self.placeStateChanged.emit(self.export_place_state())
 
     def _resolve_legacy_place(self, state):

@@ -3,8 +3,8 @@
 The old «Шаблоны» and «Быстрый / Сбалансированный / Детальный» of 1.3 in the
 current engine's terms. A preset only touches picture preparation and the
 colour order; learned brush sizes and input timings of the program stay as
-they are. «Баланс» equals the engine defaults, so a fresh install shows it
-selected and nothing changes for users who never touch the presets.
+they are. «Баланс» is the preparation every place starts with
+(place_catalog.recommended_profile, PRESET-BASE-001), so a new place shows it selected.
 Qt-free: the shell passes the controller, writes go through
 application.settings.apply_setting like any other change.
 """
@@ -16,15 +16,17 @@ QUALITY_PRESETS = (
     dict(id="fast", label="Быстро",
          detail="8 цветов и сильная очистка мелочи: рисует быстрее, мелких деталей меньше.",
          values={"k_clusters": 8, "prep_cleanup_mode": "vectorized_plus_stray_merge",
-                 "aggressive_despeckle_enabled": True, "tone_sequence": "light_to_dark",
+                 "aggressive_despeckle_enabled": True, "tone_sequence": "details_last",
                  "post_draw_repair_enabled": False}),
     dict(id="balanced", label="Баланс",
-         detail="25 цветов, мелкие области сохраняются: подходит большинству картинок.",
-         values={"k_clusters": 25, "prep_cleanup_mode": "off",
-                 "aggressive_despeckle_enabled": False, "tone_sequence": "light_to_dark",
+         detail="25 цветов, убираются только пятна до 4 клеток: подходит большинству картинок.",
+         # «Очистка» halves the specks left on cartoons without visible losses
+         # (cat 13 -> 6, chick 31 -> 9 at area 4; area 8 already ate small icons).
+         values={"k_clusters": 25, "prep_cleanup_mode": "vectorized",
+                 "aggressive_despeckle_enabled": False, "tone_sequence": "details_last",
                  "post_draw_repair_enabled": False}),
     dict(id="precise", label="Точно",
-         detail="32 цвета, мелкие детали последними и проверка холста после рисунка: дольше, зато точнее.",
+         detail="32 цвета без очистки мелочи и проверка холста после рисунка: дольше, зато точнее.",
          values={"k_clusters": 32, "prep_cleanup_mode": "off",
                  "aggressive_despeckle_enabled": False, "tone_sequence": "details_last",
                  "post_draw_repair_enabled": True}),

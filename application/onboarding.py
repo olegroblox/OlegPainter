@@ -19,27 +19,41 @@ TARGETS = (
          area_hint="Обведите холст ниже полосок «+90 секунд» — щелчок по ним тратит монеты. "
                    "Раунд длится 3–6 минут: рисунок примерно 220 × 275 пикселей в 8 цветах занимает около минуты.",
          colour_hint="В игре возьмите карандаш (кнопка 1 внизу) — слева откроется палитра. "
-                     "Укажите цветовой круг, затем ползунок яркости справа от него.",
-         brush_hint="Важно: в панели карандаша сдвиньте ползунок «Кисть» в самое начало, но не дальше края — "
-                    "иначе он перескочит на максимум. Программа рисует тонкими штрихами, толстая кисть превратит рисунок в кляксы."),
+                     "«Указать круг»: щёлкните центр круга, затем красный цвет на его краю — здесь он слева. "
+                     "«Указать яркость»: обведите рамкой ползунок справа от круга.",
+         # Live 2026-10-07: at the very start of the track the stroke is thinner than
+         # the 2 px rows and fills come out striped; a few pixels right closes them.
+         brush_hint="Важно: в панели карандаша сдвиньте ползунок «Кисть» почти в самое начало — чуть правее края. "
+                    "Дальше края не тяните: ползунок перескочит на максимум. На самом краю кисть тоньше строк рисунка "
+                    "и в заливке остаются белые полоски, а толстая кисть превратит рисунок в кляксы."),
     dict(id="spray_paint", place="spray_paint", group="Roblox", title="Spray Paint!",
          detail="Цвет вводится кодом в поле HEX.",
          # After joining the HEX row is collapsed; the size box takes 0.1..1.2.
          colour_hint="Возьмите баллончик (клавиша 1), нажмите стрелку у «Цвет», чтобы появилось поле «ХЕКС», и укажите это поле.",
-         brush_required=True,  # the 0.1 stamp is several screen pixels: without learning the route overdraws
-         brush_hint="Рекомендуется: камера сверху, кисть-квадрат. Укажите число рядом с «Размер» и место на пустом полу — "
-                    "программа сама измерит размеры 0,1–1,2 и скорость. После смены приближения камеры обучите заново."),
+         # Owner 2026-10-07: the automatic brush is optional in every place; the place
+         # draws well with its measured defaults (2 px rows, 2 ms a hop) at size 0.1.
+         brush_hint="В игре поставьте «Размер» 0,1 и форму-квадрат (щелчок по превью кисти), камера сверху. "
+                    "Автоматическая кисть — по желанию: программа измерит размеры 0,1–1,2 и будет менять их сама.",
+         speed_step="extra"),
     dict(id="draw_donate", place="draw_donate", group="Roblox", title="Draw & Donate",
-         detail="Цвет вводится кодом в поле HEX."),
+         detail="Цвет вводится кодом в поле HEX.",
+         area_hint="В игре нажмите «Change Resolution» → «Detailed» (700 × 700) → «Apply» — так рисунок выйдет "
+                   "самым детальным. Затем обведите белый холст.",
+         colour_hint="В игре откройте палитру (кнопка с цветным кругом) и перетащите её за заголовок в сторону от "
+                     "холста — она останется открытой. Укажите поле с кодом цвета (#ff9000).",
+         brush_hint="В игре поставьте «Brush Size» 1 — самая тонкая кисть."),
     # Live 2026-10-01: a round lasts 5 minutes; the player to draw stands in front of you.
-    dict(id="draw_me", place="draw_me", group="Roblox", title="Нарисуй меня!",
+    dict(id="draw_me", place="draw_me", group="Roblox", title="Draw Me!",
          detail="Рисуйте игрока по его снимку. Любые цвета — через колесо.",
-         image_hint="Наведите камеру на игрока, которого нужно нарисовать, нажмите «Снимок экрана» и обведите его рамкой. Фон уберётся сам: для этого места включено «Убирать фон у новых картинок» (переключается в «Обработке»).",
+         # Live 2026-10-07: a player standing right behind went into the cutout.
+         image_hint="Наведите камеру на игрока, которого нужно нарисовать, нажмите «Снимок экрана» и обведите его рамкой. "
+                    "Если за ним стоят другие игроки, поверните камеру правой кнопкой мыши, чтобы позади были только небо и трава.",
+         background_hint=True,
          snapshot_first=True,
          speed_step="extra",
          area_hint="Обведите белый холст. Кнопка ⤢ в игре разворачивает холст — рисунок будет крупнее, но обведите его заново.",
          colour_hint="В игре на вкладке «Цвет» нажмите «Колесо» и обведите рамкой колесо целиком — кольцо и квадрат. Непрозрачность — 100% (ползунок влево до упора), «Стабилизатор» — 0%, стиль — «Погружная ручка».",
-         brush_hint="Поставьте в игре «Размер кисти» 4 кнопками ◀ ▶: соседние полосы клетки 4 перекрываются, и в заливке не остаётся белых щелей."),
+         brush_hint="Кнопками ◀ ▶ поставьте в игре «Размер кисти» на 4: тогда соседние полосы перекрываются и в заливке не остаётся белых щелей."),
     dict(id="gartic_phone", place="gartic_phone", group="Сайт или программа", title="Gartic Phone",
          detail="Любые цвета через поле HEX, рисунок прямыми штрихами.",
          # {record_pre}/{record_post} are the keys that finish the recordings, filled in by build().
@@ -50,7 +64,14 @@ TARGETS = (
                      "3) «Записать закрытие»: щёлкните пустое место страницы (не холст и не палитру) и нажмите клавишу {record_post} — окно цвета закроется и не помешает рисовать.",
          colour_actions="hex_with_opening",
          speed_step=True,
-         brush_hint="Необязательно. Разверните браузер на весь экран — чем крупнее холст, тем точнее рисунок. В игре выберите самую тонкую кисть (клавиша 1)."),
+         # The speed step replaces the brush step here: its advice goes with the canvas.
+         area_hint="Разверните браузер на весь экран — чем крупнее холст, тем точнее рисунок — и обведите белый холст. "
+                   "В игре выберите самую тонкую кисть (клавиша 1)."),
+    dict(id="rust_sign", place="rust_sign", group="Steam", title="Rust",
+         detail="Табличка: цвет вводится кодом в поле HEX.",
+         area_hint="Откройте в игре редактор таблички и обведите её доски целиком.",
+         colour_hint="Справа в разделе «ЦВЕТ» нажмите кнопку с валиком — вместо готовых цветов появится поле с кодом (#FFFFFF). Укажите это поле.",
+         brush_hint="В разделе «КИСТЬ» выберите квадратную кисть, «РАЗМЕР» 2, «ПРОЗРАЧНОСТЬ» 1."),
     dict(id="other", place="universal", group="Сайт или программа", title="Другая программа",
          detail="Paint, другие игры и редакторы.", speed_step="extra"),
 )
@@ -88,6 +109,17 @@ def target_for_place(place_id: str) -> str:
     return "other"
 
 
+def colour_parts(service) -> dict:
+    """Which parts of each colour method are already pointed at on screen."""
+    engine = service.engine
+    from engine.olegpainter import wheel_picker
+    return dict(hex=engine.hex_input_coord is not None,
+                circle=bool(service._is_valid_hsv_circle_calibration(engine.circle_params_calib)),
+                slider=bool(service._is_valid_hsv_slider_calibration(engine.slider_params_calib)),
+                screen=bool(getattr(engine, "screen_palette_calib", None)),
+                wheel=bool(wheel_picker.valid(getattr(engine, "wheel_square_calib", None))))
+
+
 def _colour_actions(method: str, prep, service, target_info=None) -> list[dict]:
     if (target_info or {}).get("colour_actions") == "hex_with_opening":
         # The colour box opens only after recorded clicks (Gartic Phone's picker).
@@ -103,15 +135,29 @@ def _colour_actions(method: str, prep, service, target_info=None) -> list[dict]:
         slider = service._is_valid_hsv_slider_calibration(engine.slider_params_calib)
         return [dict(label="Указать круг" + (" ✓" if circle else ""), action="calibrate_color_circle"),
                 dict(label="Указать яркость" + (" ✓" if slider else ""), action="calibrate_brightness_slider")]
+    engine = getattr(service, "engine", None)
     if method == "screen_palette":
-        return [dict(label="Обвести палитру", action="calibrate_screen_palette")]
+        done = bool(getattr(engine, "screen_palette_calib", None))
+        return [dict(label="Обвести палитру" + (" ✓" if done else ""), action="calibrate_screen_palette")]
     if method == "wheel_square":
         from engine.olegpainter import wheel_picker
         done = wheel_picker.valid(getattr(service.engine, "wheel_square_calib", None))
         return [dict(label="Обвести колесо" + (" ✓" if done else ""), action="calibrate_wheel_square")]
     if method == "manual_palette":
         return [dict(label="Открыть палитру", action="open_palette")]
-    return [dict(label="Указать поле цвета", action="capture_hex_palette")]
+    field = getattr(engine, "hex_input_coord", None) is not None
+    return [dict(label="Указать поле HEX" + (" ✓" if field else ""), action="capture_hex_palette")]
+
+
+def _image_hint(target_info, service) -> str:
+    hint = target_info.get("image_hint", "")
+    if hint and target_info.get("background_hint"):
+        # Only what is really on: the place turns it on just for a user who never chose.
+        if getattr(service, "auto_background", "off") != "off":
+            hint += " Фон уберётся сам: включено «Убирать фон у новых картинок» (переключается в «Обработке»)."
+        else:
+            hint += " Фон уберите в «Обработке» или включите там «Убирать фон у новых картинок»."
+    return hint
 
 
 def _colour_hint(target_info, method, keys) -> str:
@@ -126,13 +172,64 @@ def _colour_hint(target_info, method, keys) -> str:
     return hint
 
 
+def _colour_clicks(service, keys) -> dict:
+    """Optional clicks around every colour change (open the colour window before
+    typing a code, close it after): asked right in the colour step, because a
+    newcomer never finds them on the «Слои и действия» page."""
+    engine = getattr(service, "engine", None)
+    before, after = (bool(engine is not None and engine._should_play_actions(slot)) for slot in ("pre", "post"))
+    pre, post = keys.get("record_pre_color_actions"), keys.get("record_post_color_actions")
+    finish = (f"нажмите клавишу {pre}, чтобы закончить запись щелчков до цвета, или {post} — после"
+              if pre and post else "вернитесь в OlegPainter и нажмите «Сохранить запись» на странице «Слои и действия»")
+    return dict(question="Действия до и после выбора цвета",
+                detail=("Те же, что на странице «Слои и действия». Например, открыть окно цвета перед вводом кода и закрыть его после. "
+                        f"Нажмите кнопку записи, щёлкните нужное в программе, затем {finish}. "
+                        "Программа будет повторять эти щелчки при каждой смене цвета."),
+                actions=[dict(label="Записать действия до выбора цвета" + (" ✓" if before else ""), action="record_pre_color_actions"),
+                         dict(label="Записать действия после выбора цвета" + (" ✓" if after else ""), action="record_post_color_actions"),
+                         dict(label="Открыть «Слои и действия»", action="open_sequences")])
+
+
+# Full video guides on the «Олег Роблокс» channel (2026-10-08): the video id and the
+# second where each quick-start step begins in it.
+GUIDES = {
+    "speed_draw": ("09Br3P5Kv_U", dict(image=9, area=37, brush=45, colour=51, start=68)),
+    "spray_paint": ("fTpMN7gU82E", dict(image=9, area=39, colour=49, start=67)),
+    "draw_me": ("BMGyUZ3Ly0g", dict(image=9, area=25, colour=33, brush=41, start=48)),
+    "gartic_phone": ("ldZ9z3KTQV0", dict(image=14, area=34, colour=40, start=75)),
+    "draw_donate": ("r7Ff3gp0ELc", dict(image=17, area=5, colour=43, start=51)),
+    "rust_sign": ("hRVb8BMvJvQ", dict(image=8, area=30, colour=37, brush=44, start=44)),
+}
+
+
+def guide_url(target: str, step_id: str = "") -> str:
+    """The place's video guide, at the step when it is known; "" without a guide."""
+    video, steps = GUIDES.get(target, ("", {}))
+    if not video:
+        return ""
+    second = steps.get(step_id)
+    return f"https://youtu.be/{video}" + (f"?t={second}" if second else "")
+
+
+def hint_clip(target: str, step_id: str) -> str:
+    """A short silent loop of this step cut from the place's video guide
+    (assets/hints/<target>/<step>.webp), as a file URL; "" when there is none."""
+    from pathlib import Path
+    from app_paths import get_app_paths
+    for path in get_app_paths().resource_candidates(Path("assets") / "hints" / target / f"{step_id}.webp"):
+        if path.is_file():
+            return path.as_uri()
+    return ""
+
+
 def _start_hint(keys) -> str:
     start, stop = keys.get("start_pause"), keys.get("stop")
-    if start and stop:
-        return f"Переключитесь в программу и нажмите «Начать» или {start}. {stop} — остановить."
+    hint = "Нажмите «Начать рисование»: окно свернётся на время рисунка."
     if start:
-        return f"Переключитесь в программу и нажмите «Начать» или {start}."
-    return "Нажмите «Начать рисовать»: окно свернётся на время рисунка."
+        hint += f" Или нажмите {start} прямо в программе рисования."
+    if stop:
+        hint += f" {stop} — остановить."
+    return hint
 
 
 QUICK_PLACE = "quick_place"     # profile category marking a user's own place (PLACES-003)
@@ -163,7 +260,7 @@ def build(state, service, *, brush_ready: bool, language: str = "ru", target_cho
         image_actions = image_actions[3:] + image_actions[:3]
     steps = [
         dict(id="image", title="Картинка", done=bool(prep.image_loaded),
-             detail=target_info.get("image_hint") or (
+             detail=_image_hint(target_info, service) or (
                  f"Откройте файл, вставьте картинку из буфера ({paste}), найдите её в интернете "
                  "или сделайте снимок экрана." if paste
                  else "Откройте файл, вставьте картинку из буфера, найдите её в интернете "
@@ -177,22 +274,41 @@ def build(state, service, *, brush_ready: bool, language: str = "ru", target_cho
         dict(id="colour", title="Как выбирается цвет", done=colour_done,
              detail=_colour_hint(target_info, method, keys),
              actions=_colour_actions(method, prep, service, target_info)),
-        dict(id="brush", title="Размер кисти", done=brush_ready, optional=not target_info.get("brush_required"),
-             detail=target_info.get("brush_hint") or "Необязательно. Программа сама научится менять размер кисти: большие области быстрее, мелочь точнее. Без этого рисунок идёт текущим размером кисти.",
-             actions=[dict(label="Настроить кисть", action="open_brush")]),
+        # A place with its own brush hint says what to set in the game; elsewhere the
+        # step is the optional automatic brush, named as such (a bare «Размер кисти»
+        # read as «choose a size» — owner, 2026-10-05).
+        dict(id="brush", title="Размер кисти" if target_info.get("brush_hint") else "Автоматическая кисть",
+             done=brush_ready, optional=not target_info.get("brush_required"),
+             detail=target_info.get("brush_hint") or (
+                 "Необязательно. Программа будет сама менять размер кисти во время рисунка: большие области — "
+                 "крупной кистью (быстрее), края и мелочь — самой маленькой (точнее). Для этого один раз покажите ей "
+                 "регулятор размера кисти и свободное место для пробных мазков. Без этого весь рисунок идёт одним "
+                 "размером — тем, что выбран в программе."),
+             # A manual hint is done in the game: the button is the optional automatic brush.
+             actions=[dict(label="Настроить автоматическую кисть", action="open_brush")]),
     ]
+    # Every place: ready places too may need a window opened around the colour, and
+    # the owner looked for these buttons there (2026-10-06).
+    if not any(action["action"].startswith("record_") for action in steps[2]["actions"]):   # Gartic: in the main row
+        steps[2]["extra"] = _colour_clicks(service, keys)
     if target_info.get("speed_step"):
         # Browser games: no size control to learn, but the pause the page needs
         # between strokes differs between computers and browsers. Any other
         # program or game gets the same optional step next to the brush.
         engine = getattr(service, "engine", None)
-        measured = float(getattr(engine, "pen_stroke_gap", 0.0) or 0.0) > 0
+        # Outside straight strokes the probe sets turn and lift pauses, not the stroke gap.
+        measured = (bool(getattr(engine, "input_timing_measured", False))
+                    or float(getattr(engine, "pen_stroke_gap", 0.0) or 0.0) > 0)
         zone = getattr(engine, "dynamic_brush_scratch_zone", None) is not None
-        speed = dict(id="speed", title="Скорость", done=measured, optional=True,
-                     detail=("Необязательно. Выделите чистый уголок холста и выберите в программе тёмный цвет — "
-                             "программа сама подберёт самую быструю паузу между штрихами, при которой ничего не теряется."),
-                     actions=[dict(label="Место для проб" + (" ✓" if zone else ""), action="capture_scratch"),
-                              dict(label="Подобрать скорость" + (" ✓" if measured else ""), action="learn_speed")])
+        blocker = getattr(service, "brush_learning_blocker", None)
+        speed = dict(id="speed", title="Подбор скорости", done=measured, optional=True,
+                     detail=("Необязательно. Программа сама найдёт самую быструю скорость, при которой рисунок "
+                             "не теряет штрихи: нарисует несколько пробных линий в чистом уголке холста. "
+                             "Выделите этот уголок и выберите в программе тёмный цвет. Пробные линии останутся — "
+                             "потом сотрите их. Без подбора рисунок идёт с обычными паузами из настроек."),
+                     actions=[dict(label="Выделить место для проб" + (" ✓" if zone else ""), action="capture_scratch"),
+                              dict(label="Подобрать скорость" + (" ✓" if measured else ""), action="learn_speed",
+                                   blocked=blocker("speed") if callable(blocker) else "")])
         if target_info["speed_step"] == "extra":
             steps.append(speed)
         else:
@@ -201,10 +317,12 @@ def build(state, service, *, brush_ready: bool, language: str = "ru", target_cho
     current = next((step["id"] for step in required if not step["done"]), "start")
     steps.append(dict(id="start", title="Рисуем", done=False, optional=False,
                       detail=(_start_hint(keys) if prep.can_start else "Сначала завершите шаги выше."),
-                      actions=[dict(label="Начать рисовать", action="start_pause")] if prep.can_start else []))
+                      actions=[dict(label="Начать рисование", action="start_pause")] if prep.can_start else []))
     for step in steps:
         step.setdefault("optional", False)
         step["current"] = step["id"] == current
+        step["hint"] = hint_clip(target, step["id"]) if target != "other" else ""
+        step["guide_url"] = guide_url(target, step["id"]) if step["hint"] else ""
     method_choice = method
     targets = [dict(id=t["id"], place=t["place"], group=t["group"], title=t["title"], detail=t["detail"])
                for t in TARGETS]
@@ -215,4 +333,4 @@ def build(state, service, *, brush_ready: bool, language: str = "ru", target_cho
     return dict(targets=targets, methods=[dict(m) for m in METHODS],
                 target=target if target_chosen else "", target_chosen=bool(target_chosen),
                 method=method, method_choice=method_choice, steps=steps, current=current,
-                ready=bool(prep.can_start))
+                ready=bool(prep.can_start), guide_url=guide_url(target) if target_chosen else "")

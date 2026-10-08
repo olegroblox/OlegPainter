@@ -285,6 +285,15 @@ def test_edit_modes_are_exclusive_and_cancel_pending_calibration(desktop):
     assert window.kalka_overlay._state.window.click_through
 
 
+def test_drawing_start_hides_passive_stencil_over_the_canvas(desktop):
+    _, window, service = desktop
+    window.kalka_overlay.show()
+    service.drawingStateChanged.emit("paused")
+    assert window.kalka_overlay.isVisible()
+    service.drawingStateChanged.emit("started")
+    assert not window.kalka_overlay.isVisible()
+
+
 def test_calibration_result_saved_and_cancel_leaves_previous_value(desktop):
     controller, _, service = desktop
     service.screenCalibrationRequested.emit("ring")

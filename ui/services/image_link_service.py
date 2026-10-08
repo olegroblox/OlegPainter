@@ -66,7 +66,7 @@ class ImageLinkMixin:
                                                   + web_image.COPY_HINT))
             return
         if self.paste_image(image, origin=origin):
-            self.statusChanged.emit("Картинка загружена. Обрежьте лишнее или уберите фон, если нужно.")
+            self.statusChanged.emit("Картинка загружена. Фон можно убрать в «Обработке», а края обрезать в трафарете (Alt+F2).")
 
     def cancel_image_download(self) -> None:
         """A newer picture (file, paste) wins over a link still loading."""
@@ -82,7 +82,7 @@ class ImageLinkMixin:
         if self.paste_image(image, origin="Снимок экрана"):
             if self.auto_background == "off":
                 note = self._insert_note
-                self.statusChanged.emit("Снимок экрана вставлен. Обрежьте лишнее или уберите фон, если нужно."
+                self.statusChanged.emit("Снимок экрана вставлен. Фон можно убрать в «Обработке», а края обрезать в трафарете (Alt+F2)."
                                         + (" " + note if note else ""))
             return True
         return False

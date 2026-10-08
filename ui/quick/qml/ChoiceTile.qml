@@ -27,6 +27,7 @@ Button {
         spacing: 3
         Label {
             visible: tile.overline !== ""
+            Layout.fillWidth: true; wrapMode: Text.WordWrap
             text: tile.overline.toUpperCase(); color: tile.selected ? Theme.accentText : Theme.muted
             font.pixelSize: 10; font.weight: Font.DemiBold; font.letterSpacing: 0.8
         }

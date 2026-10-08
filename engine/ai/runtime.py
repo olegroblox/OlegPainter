@@ -1,10 +1,9 @@
 """Where AI models run: DirectML on the strongest GPU, CPU otherwise (AI-001).
 
 onnxruntime-directml works on NVIDIA, AMD and Intel GPUs from one wheel and
-falls back to the CPU. DirectML device ids follow DXGI adapter order, which on
-hybrid PCs may put an integrated GPU first, so the high-performance adapter is
-looked up explicitly. Sessions are cached per (model file, device) and dropped
-together when AI is switched off.
+falls back to the CPU. DirectML device ids follow DXGI adapter order, which may put
+built-in graphics first, so the adapter is chosen explicitly (`pick_gpu`). Sessions
+are cached per (model file, device) and dropped together when AI is switched off.
 """
 from __future__ import annotations
 
@@ -39,52 +38,87 @@ def _guid(text: str):
     return result
 
 
-@lru_cache(maxsize=1)
-def best_gpu() -> GpuInfo | None:
-    """The high-performance DXGI adapter and its DirectML device id, or None
-    (no Windows, no discrete/integrated GPU, only the software renderer)."""
-    if os.name != "nt":
+@dataclass(frozen=True)
+class Adapter:
+    """One DXGI adapter as IDXGIFactory1::EnumAdapters1 lists it: DirectML's device_id is its index."""
+    index: int
+    name: str
+    vendor: int
+    memory_mb: int
+    software: bool = False
+
+
+_MICROSOFT = 0x1414          # Basic Render Driver, Remote Display Adapter: no real GPU
+
+
+def pick_gpu(adapters) -> GpuInfo | None:
+    """The real GPU with the most dedicated video memory; on a tie the one Windows
+    lists first (the primary display adapter).
+
+    Not Windows' «high performance» answer: on desktops with a Ryzen whose built-in
+    graphics stays on, EnumAdapterByGpuPreference(HIGH_PERFORMANCE) put the 0.5 GB
+    «AMD Radeon(TM) Graphics» before a 16 GB RTX 4070 Ti SUPER (2026-10-05)."""
+    real = [adapter for adapter in adapters if not adapter.software and adapter.vendor != _MICROSOFT]
+    if not real:
         return None
+    best = max(real, key=lambda adapter: (adapter.memory_mb, -adapter.index))
+    return GpuInfo(best.name, best.index, best.memory_mb)
+
+
+def list_adapters() -> list[Adapter]:
+    """The DXGI adapters in EnumAdapters1 order (the order DirectML's device_id counts)."""
+    if os.name != "nt":
+        return []
+
+    class DESC1(ctypes.Structure):
+        _fields_ = [("Description", ctypes.c_wchar * 128), ("VendorId", ctypes.c_uint), ("DeviceId", ctypes.c_uint),
+                    ("SubSysId", ctypes.c_uint), ("Revision", ctypes.c_uint), ("DedicatedVideoMemory", ctypes.c_size_t),
+                    ("DedicatedSystemMemory", ctypes.c_size_t), ("SharedSystemMemory", ctypes.c_size_t),
+                    ("Luid", ctypes.c_int64), ("Flags", ctypes.c_uint)]
+
+    dxgi = ctypes.WinDLL("dxgi")
+    factory = ctypes.c_void_p()
+    iid_factory1 = _guid("770aae78-f26f-4dba-a829-253c83d1b387")
+    if dxgi.CreateDXGIFactory1(ctypes.byref(iid_factory1), ctypes.byref(factory)) != 0:
+        return []
+    release = lambda item: ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(_vtable(item)[2])(item)  # noqa: E731
     try:
-        class DESC1(ctypes.Structure):
-            _fields_ = [("Description", ctypes.c_wchar * 128), ("VendorId", ctypes.c_uint), ("DeviceId", ctypes.c_uint),
-                        ("SubSysId", ctypes.c_uint), ("Revision", ctypes.c_uint), ("DedicatedVideoMemory", ctypes.c_size_t),
-                        ("DedicatedSystemMemory", ctypes.c_size_t), ("SharedSystemMemory", ctypes.c_size_t),
-                        ("Luid", ctypes.c_int64), ("Flags", ctypes.c_uint)]
-        dxgi = ctypes.WinDLL("dxgi")
-        factory = ctypes.c_void_p()
-        iid_factory6 = _guid("c1b6694f-ff09-44a9-b03c-77900a0a1d17")
-        if dxgi.CreateDXGIFactory1(ctypes.byref(iid_factory6), ctypes.byref(factory)) != 0:
-            return None
-        table = ctypes.cast(ctypes.cast(factory, ctypes.POINTER(ctypes.c_void_p))[0], ctypes.POINTER(ctypes.c_void_p))
         enum_adapters = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.c_uint,
-                                           ctypes.POINTER(ctypes.c_void_p))(table[12])
-        enum_by_preference = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.c_uint, ctypes.c_uint,
-                                                ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p))(table[29])
-        iid_adapter1 = _guid("29038f61-3839-4626-91fd-086879011a05")
-
-        def describe(adapter):
-            vtable = ctypes.cast(ctypes.cast(adapter, ctypes.POINTER(ctypes.c_void_p))[0], ctypes.POINTER(ctypes.c_void_p))
-            desc = DESC1()
-            ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.POINTER(DESC1))(vtable[10])(adapter, ctypes.byref(desc))
-            return desc
-
-        best = ctypes.c_void_p()
-        # DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE = 1
-        if enum_by_preference(factory, 0, 1, ctypes.addressof(iid_adapter1), ctypes.byref(best)) != 0:
-            return None
-        wanted = describe(best)
-        if wanted.Flags & 2:  # DXGI_ADAPTER_FLAG_SOFTWARE: no real GPU
-            return None
+                                           ctypes.POINTER(ctypes.c_void_p))(_vtable(factory)[12])
+        found = []
         for index in range(16):
             adapter = ctypes.c_void_p()
-            if enum_adapters(factory, index, ctypes.byref(adapter)) != 0:
+            if enum_adapters(factory, index, ctypes.byref(adapter)) != 0:   # DXGI_ERROR_NOT_FOUND: the end
                 break
-            if describe(adapter).Luid == wanted.Luid:
-                return GpuInfo(wanted.Description, index, int(wanted.DedicatedVideoMemory // 2**20))
+            try:
+                desc = DESC1()
+                ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.POINTER(DESC1))(_vtable(adapter)[10])(
+                    adapter, ctypes.byref(desc))
+                found.append(Adapter(index, desc.Description, desc.VendorId, int(desc.DedicatedVideoMemory // 2**20),
+                                     bool(desc.Flags & 2)))                  # DXGI_ADAPTER_FLAG_SOFTWARE
+            finally:
+                release(adapter)
+        return found
+    finally:
+        release(factory)
+
+
+def _vtable(item):
+    return ctypes.cast(ctypes.cast(item, ctypes.POINTER(ctypes.c_void_p))[0], ctypes.POINTER(ctypes.c_void_p))
+
+
+@lru_cache(maxsize=1)
+def best_gpu() -> GpuInfo | None:
+    """The GPU AI models run on and its DirectML device id, or None (no Windows,
+    only the software renderer)."""
+    try:
+        adapters = list_adapters()
     except Exception:
         log.debug("GPU detection failed", exc_info=True)
-    return None
+        return None
+    gpu = pick_gpu(adapters)
+    log.info("GPU for AI: %s (adapters: %s)", gpu, ", ".join(f"{a.index}:{a.name} {a.memory_mb} MB" for a in adapters))
+    return gpu
 
 
 def directml_available() -> bool:

@@ -8,11 +8,13 @@ import QtQuick.Layouts
 Popup {
     id: viewer
     required property var backend
-    property string mode: "result"              // original / result / compare
+    property string mode: "result"              // original / result / compare / inserted
     property real zoom: 1                       // 1 = the whole picture fits
     property real split: 0.5                    // compare: share of the width showing the original
-    readonly property url originalSource: backend.originalUrl || backend.sourceUrl
-    readonly property url shownSource: mode === "original" ? originalSource : backend.previewUrl
+    // «Оригинал» is the picture as it is now, the same as on the canvas tab: showing
+    // the inserted one there brought back a removed background. That one is «До обработки».
+    readonly property url originalSource: backend.sourceUrl
+    readonly property url shownSource: mode === "original" ? originalSource : mode === "inserted" ? backend.originalUrl : backend.previewUrl
     readonly property real fitScale: base.sourceSize.width > 0 && base.sourceSize.height > 0
         ? Math.min(flick.width / base.sourceSize.width, flick.height / base.sourceSize.height) : 1
     readonly property real pixelZoom: fitScale > 0 ? 1 / fitScale : 1     // zoom that shows 1:1
@@ -30,7 +32,7 @@ Popup {
     Overlay.modal: Rectangle { color: Theme.scrim }
 
     function openWith(what) {
-        mode = what === "original" ? "original" : what === "compare" ? "compare" : "result"
+        mode = what === "original" ? "original" : what === "compare" ? "compare" : what === "inserted" ? "inserted" : "result"
         zoom = 1; split = 0.5
         open()
     }
@@ -45,31 +47,43 @@ Popup {
 
     contentItem: ColumnLayout {
         spacing: 12
-        RowLayout {
-            Layout.fillWidth: true; spacing: 8
-            Label { text: qsTr("Просмотр"); font.pixelSize: 18; font.weight: Font.DemiBold }
-            Item { Layout.fillWidth: true }
-            Repeater {
-                model: [{id: "original", label: qsTr("Оригинал")}, {id: "result", label: qsTr("Результат")}, {id: "compare", label: qsTr("Сравнить")}]
-                delegate: ActionButton {
-                    required property var modelData
-                    objectName: "viewerMode_" + modelData.id
-                    text: modelData.label; selected: viewer.mode === modelData.id
-                    enabled: modelData.id === "original" ? !!viewer.originalSource.toString() : !!viewer.backend.previewUrl
-                    onClicked: viewer.mode = modelData.id
+        // The controls wrap: in one row they needed ~860 px and ran past a smaller window.
+        GridLayout {
+            id: viewerBar
+            readonly property bool oneRow: viewer.availableWidth >= viewerTitle.implicitWidth + viewerTools.lineWidth + columnSpacing
+            Layout.fillWidth: true
+            columns: oneRow ? 2 : 1; columnSpacing: 8; rowSpacing: 8
+            Label { id: viewerTitle; text: qsTr("Просмотр"); font.pixelSize: 18; font.weight: Font.DemiBold; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+            ButtonRow {
+                id: viewerTools
+                Layout.fillWidth: !viewerBar.oneRow
+                Repeater {
+                    model: [{id: "original", label: qsTr("Оригинал")}, {id: "result", label: qsTr("Результат")}, {id: "compare", label: qsTr("Сравнить")},
+                            {id: "inserted", label: qsTr("До обработки")}]
+                    delegate: ActionButton {
+                        required property var modelData
+                        objectName: "viewerMode_" + modelData.id
+                        text: modelData.label; selected: viewer.mode === modelData.id
+                        visible: modelData.id !== "inserted" || !!viewer.backend.originalUrl
+                        hint: modelData.id === "inserted" ? qsTr("Картинка такой, какой её вставили, до фона и фильтров") : ""
+                        enabled: modelData.id === "original" ? !!viewer.originalSource.toString()
+                               : modelData.id === "inserted" ? !!viewer.backend.originalUrl : !!viewer.backend.previewUrl
+                        onClicked: viewer.mode = modelData.id
+                    }
                 }
+                Item { width: 1; height: 38; Rectangle { anchors.centerIn: parent; width: 1; height: 26; color: Theme.border } }
+                ActionButton { iconName: "minus"; hint: qsTr("Отдалить"); onClicked: viewer.setZoom(viewer.zoom / 1.5, flick.width / 2, flick.height / 2) }
+                Label {
+                    objectName: "viewerZoom"
+                    width: 52; height: 38; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                    color: Theme.muted; font.pixelSize: 12
+                    text: Math.round(viewer.zoom * viewer.fitScale * 100) + "%"
+                }
+                ActionButton { iconName: "plus"; hint: qsTr("Приблизить"); onClicked: viewer.setZoom(viewer.zoom * 1.5, flick.width / 2, flick.height / 2) }
+                ActionButton { objectName: "viewerFit"; text: qsTr("Вписать"); subtle: true; selected: viewer.zoom === 1; onClicked: viewer.zoom = 1 }
+                ActionButton { text: "1:1"; subtle: true; hint: qsTr("Пиксель в пиксель"); onClicked: viewer.setZoom(viewer.pixelZoom, flick.width / 2, flick.height / 2) }
+                ActionButton { objectName: "closeViewer"; text: qsTr("Закрыть"); onClicked: viewer.close() }
             }
-            Rectangle { width: 1; height: 26; color: Theme.border }
-            ActionButton { iconName: "minus"; hint: qsTr("Отдалить"); onClicked: viewer.setZoom(viewer.zoom / 1.5, flick.width / 2, flick.height / 2) }
-            Label {
-                objectName: "viewerZoom"
-                Layout.preferredWidth: 52; horizontalAlignment: Text.AlignHCenter; color: Theme.muted; font.pixelSize: 12
-                text: Math.round(viewer.zoom * viewer.fitScale * 100) + "%"
-            }
-            ActionButton { iconName: "plus"; hint: qsTr("Приблизить"); onClicked: viewer.setZoom(viewer.zoom * 1.5, flick.width / 2, flick.height / 2) }
-            ActionButton { objectName: "viewerFit"; text: qsTr("Вписать"); subtle: true; selected: viewer.zoom === 1; onClicked: viewer.zoom = 1 }
-            ActionButton { text: "1:1"; subtle: true; hint: qsTr("Пиксель в пиксель"); onClicked: viewer.setZoom(viewer.pixelZoom, flick.width / 2, flick.height / 2) }
-            ActionButton { objectName: "closeViewer"; text: qsTr("Закрыть"); onClicked: viewer.close() }
         }
         Rectangle {
             Layout.fillWidth: true; Layout.fillHeight: true
@@ -149,6 +163,7 @@ Popup {
             }
             Label {
                 anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter; anchors.bottomMargin: 12
+                width: Math.min(implicitWidth, parent.width - 24); wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter
                 padding: 6; color: Theme.muted; font.pixelSize: 12
                 background: Rectangle { color: Theme.surface; radius: 8; opacity: 0.85 }
                 text: viewer.mode === "compare" ? qsTr("Слева оригинал, справа результат — двигайте разделитель. Колесо — масштаб, двойной щелчок — вписать или крупно.")

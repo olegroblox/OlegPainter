@@ -49,28 +49,37 @@ Card {
                 enabled: editor.canEdit
                 onClicked: editor.backend.action("calibrate_alpha_slider")
             }
-            Label { text: qsTr("Цвет чистого холста (HEX)") }
-            RowLayout {
+            Label { text: qsTr("Цвет чистого холста (HEX)"); Layout.fillWidth: true; wrapMode: Text.WordWrap }
+            // The buttons go under the field on a narrow window: in one row they ran 105 px
+            // past a 360 px window (audit 2026-10-05).
+            GridLayout {
                 Layout.fillWidth: true
-                Rectangle { width: 28; height: 28; radius: 6; color: editor.values.canvas_hex; border.color: Theme.muted }
-                InputField {
-                    id: canvasColor; objectName: "mixCanvasColor"
-                    Layout.fillWidth: true; maximumLength: 7
-                    enabled: editor.canEdit; placeholderText: "#FFFFFF"
-                    text: editor.values.canvas_hex
-                    onAccepted: editor.backend.setManualMix({canvas_hex: text})
+                columns: editor.width < 520 ? 1 : 2; columnSpacing: 8; rowSpacing: 8
+                RowLayout {
+                    Layout.fillWidth: true
+                    Rectangle { width: 28; height: 28; radius: 6; color: editor.values.canvas_hex; border.color: Theme.muted }
+                    InputField {
+                        id: canvasColor; objectName: "mixCanvasColor"
+                        Layout.fillWidth: true; maximumLength: 7
+                        enabled: editor.canEdit; placeholderText: "#FFFFFF"
+                        text: editor.values.canvas_hex
+                        onAccepted: editor.backend.setManualMix({canvas_hex: text})
+                    }
                 }
-                ActionButton {
-                    objectName: "saveMixCanvas"
-                    text: qsTr("Применить"); enabled: editor.canEdit
-                    onClicked: editor.backend.setManualMix({canvas_hex: canvasColor.text})
-                }
-                ActionButton {
-                    objectName: "pickMixCanvas"
-                    iconName: "screenshot"; text: qsTr("Взять с экрана"); subtle: true
-                    hint: qsTr("Щёлкните по чистому месту холста в программе рисования")
-                    enabled: editor.canEdit
-                    onClicked: editor.backend.pickMixCanvasColor()
+                ButtonRow {
+                    Layout.fillWidth: editor.width < 520
+                    ActionButton {
+                        objectName: "saveMixCanvas"
+                        text: qsTr("Применить"); enabled: editor.canEdit
+                        onClicked: editor.backend.setManualMix({canvas_hex: canvasColor.text})
+                    }
+                    ActionButton {
+                        objectName: "pickMixCanvas"
+                        iconName: "screenshot"; text: qsTr("Взять с экрана"); subtle: true
+                        hint: qsTr("Щёлкните по чистому месту холста в программе рисования")
+                        enabled: editor.canEdit
+                        onClicked: editor.backend.pickMixCanvasColor()
+                    }
                 }
             }
             Label {

@@ -1,4 +1,4 @@
-﻿import contextlib
+import contextlib
 import logging
 
 log = logging.getLogger("olegpainter.engine.olegpainter.core")
@@ -152,6 +152,9 @@ class OlegPainter(DynamicBrushMixin, PostDrawRepairMixin, OutlineFillMixin, Extr
         # (pen_stroke_gap 0 = automatic, see _split_gap).
         self.pen_split_strokes = False
         self.pen_stroke_gap = 0.0
+        # The speed probe ran for this place: outside straight strokes it sets the
+        # turn and lift pauses, so the gap alone cannot tell (quick start step).
+        self.input_timing_measured = False
         self._split_state = None
         self.brush_size = 2
         self.drawing_algorithm = "dfs_4dir"
@@ -1041,6 +1044,7 @@ class OlegPainter(DynamicBrushMixin, PostDrawRepairMixin, OutlineFillMixin, Extr
             "pen_split_strokes": bool(getattr(self, "pen_split_strokes", False)),
             "hex_field_opened_by_actions": bool(getattr(self, "hex_field_opened_by_actions", False)),
             "pen_stroke_gap": float(getattr(self, "pen_stroke_gap", 0.0)),
+            "input_timing_measured": bool(getattr(self, "input_timing_measured", False)),
             "focus_target_window_enabled": bool(getattr(self, "focus_target_window_enabled", True)),
             "brush_size": self.brush_size,
             "dynamic_brush_enabled": bool(getattr(self, "dynamic_brush_enabled", False)),
@@ -1198,6 +1202,7 @@ class OlegPainter(DynamicBrushMixin, PostDrawRepairMixin, OutlineFillMixin, Extr
             self.hex_field_opened_by_actions = bool(data.get("hex_field_opened_by_actions",
                                                              getattr(self, "hex_field_opened_by_actions", False)))
             self.pen_stroke_gap = min(1.0, max(0.0, float(data.get("pen_stroke_gap", getattr(self, "pen_stroke_gap", 0.0)))))
+            self.input_timing_measured = bool(data.get("input_timing_measured", getattr(self, "input_timing_measured", False)))
             self.focus_target_window_enabled = bool(data.get("focus_target_window_enabled", getattr(self, "focus_target_window_enabled", True)))
             self.brush_size = int(data.get("brush_size", self.brush_size))
             self.dynamic_brush_enabled = bool(data.get("dynamic_brush_enabled", getattr(self, "dynamic_brush_enabled", False)))
@@ -1940,12 +1945,13 @@ class OlegPainter(DynamicBrushMixin, PostDrawRepairMixin, OutlineFillMixin, Extr
             total = max(1, int(opaque.sum()))
             kept = [int(c) for c in np.flatnonzero(sizes >= max(4.0, 0.003 * total))]
             kept = self._drop_transition_colours(label_map, kept, pixels, np.asarray(merged).reshape(-1))
-            count = int(max(1, len(kept)))
-            # Black-and-white: every real colour is grey (no chroma) and at most one
-            # dark and one light remain — line art, text, a black silhouette.
             from .color_spaces import rgb_to_oklab_numpy
             lab = rgb_to_oklab_numpy(np.asarray(pixels, np.float32).reshape(-1, 3))
             merged_flat = np.asarray(merged).reshape(-1)
+            kept += self._small_distinct_colours(sizes, kept, lab, merged_flat, total)
+            count = int(max(1, len(kept)))
+            # Black-and-white: every real colour is grey (no chroma) and at most one
+            # dark and one light remain — line art, text, a black silhouette.
             centres = [lab[merged_flat == c].mean(axis=0) for c in kept] or [lab.mean(axis=0)]
             grey = all(float(np.hypot(c[1], c[2])) < 0.04 for c in centres)
             dark = sum(1 for c in centres if c[0] < 0.5)
@@ -1956,6 +1962,30 @@ class OlegPainter(DynamicBrushMixin, PostDrawRepairMixin, OutlineFillMixin, Extr
         except Exception:
             log.debug("recommend_color_count failed", exc_info=True)
             return {"count": 0, "reason": "error"}
+
+    # Eyes: the white and the pupil of a cartoon whale were 0.24 and 0.27 % of the
+    # picture, under the 0.3 % area rule, and the drawing lost its eye (live Rust
+    # 2026-10-08). A small colour counts when it is far from every kept one.
+    SMALL_COLOUR_MIN_SHARE = 0.001
+    SMALL_COLOUR_MIN_DISTANCE = 0.15
+
+    @classmethod
+    def _small_distinct_colours(cls, sizes, kept, lab, merged, total) -> list:
+        if not kept:
+            return []
+        centre = {}
+        def centre_of(c):
+            if c not in centre:
+                centre[c] = lab[merged == c].mean(axis=0)
+            return centre[c]
+        extra = []
+        for c in np.argsort(-np.asarray(sizes)):
+            c = int(c)
+            if c in kept or c in extra or sizes[c] < max(4.0, cls.SMALL_COLOUR_MIN_SHARE * total):
+                continue
+            if min(float(np.linalg.norm(centre_of(c) - centre_of(k))) for k in kept + extra) >= cls.SMALL_COLOUR_MIN_DISTANCE:
+                extra.append(c)
+        return extra
 
     @staticmethod
     def _drop_transition_colours(label_map, kept, pixels, merged) -> list:
@@ -6890,6 +6920,11 @@ class OlegPainter(DynamicBrushMixin, PostDrawRepairMixin, OutlineFillMixin, Extr
         # Both ways: a cell wider than the smallest stamp leaves seams between
         # strokes (a 1px stamp on a 2px grid paints every other pixel).
         recommended = max(1, int(round(diameter)))
+        if getattr(self, "target_connects_points", None) is False:
+            # A stamping game needs overlapping rows (stamps jitter by a frame and a
+            # tilted camera squashes them); a program drawing exact lines does not.
+            from .input_timing import stamp_row_pitch
+            recommended = stamp_row_pitch(diameter / 2.0)
         return recommended if recommended != cell else None
 
     def _dynamic_brush_passes(self) -> list:
@@ -7029,6 +7064,9 @@ class OlegPainter(DynamicBrushMixin, PostDrawRepairMixin, OutlineFillMixin, Extr
     # of another colour at a similar lightness (red lips on skin). Light specks on
     # a darker area are highlights and edge noise: on real snapshots keeping them
     # sprinkled white dots over faces and doubled the regions to draw.
+    # It must stand out against EVERY colour it touches: a speck between a light and
+    # a dark neighbour is the anti-aliasing fringe of an edge (live 2026-10-06: the
+    # outline of a cartoon cat became 1406 dark dots, a pen lift each).
     _DETAIL_DARKER = 0.12
     _DETAIL_HUE = 0.10
     _DETAIL_LIGHTER = 0.06
@@ -7104,7 +7142,11 @@ class OlegPainter(DynamicBrushMixin, PostDrawRepairMixin, OutlineFillMixin, Extr
                         merges_done += 1
                     continue
                 best_neighbor = max(neighbor_votes.items(), key=lambda item: (counts.get(item[0], 0), item[1], -item[0]))[0]
-                if gap is not None and gap(cid, best_neighbor) > 1.0:
+                # A detail sits inside the object; a dark speck on the edge of a cut-out
+                # player is the outline's shading (black dots along the arms, live
+                # «Нарисуй меня!» 2026-10-07).
+                if (gap is not None and not touches_background
+                        and all(gap(cid, other) > 1.0 for other in neighbor_votes)):
                     continue                      # a detail, not noise: keep it
                 for r, c in component_coords:
                     self.cluster_map[r, c] = best_neighbor
@@ -7139,14 +7181,20 @@ class OlegPainter(DynamicBrushMixin, PostDrawRepairMixin, OutlineFillMixin, Extr
             colours = {int(entry[1]): entry[3] for entry in (getattr(self, "color_palette", None) or [])
                        if entry[1] is not None and entry[3] is not None}
             gap = self._colour_gaps(colours)
-            moved = np.argwhere((new_map != old_map) & (new_map != background_cluster_id))
-            pairs = {}
-            for r, c in moved:
-                pairs.setdefault((int(old_map[r, c]), int(new_map[r, c])), []).append((r, c))
-            for (old, new), cells in pairs.items():
-                if gap(old, new) > 1.0:
-                    rows, cols = zip(*cells)
-                    new_map[list(rows), list(cols)] = old      # a detail, not noise
+            moved = (new_map != old_map) & (new_map != background_cluster_id)
+            cross = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]], np.uint8)
+            for old in np.unique(old_map[moved]):
+                count, comps, stats, _ = cv2.connectedComponentsWithStats(
+                    (moved & (old_map == old)).astype(np.uint8), connectivity=4)
+                for idx in range(1, count):
+                    x, y, w, h = (int(v) for v in stats[idx, :4])
+                    top, left = max(0, y - 1), max(0, x - 1)
+                    window = (slice(top, y + h + 1), slice(left, x + w + 1))
+                    cells = comps[window] == idx
+                    ring = cv2.dilate(cells.astype(np.uint8), cross).astype(bool) & ~cells
+                    others = {int(v) for v in np.unique(old_map[window][ring])} - {int(old), int(background_cluster_id)}
+                    if others and all(gap(int(old), other) > 1.0 for other in others):
+                        new_map[window][cells] = old      # a detail, not noise
         changed = int(np.count_nonzero(new_map != old_map))
         if changed == 0:
             return 0
@@ -9006,6 +9054,7 @@ class OlegPainter(DynamicBrushMixin, PostDrawRepairMixin, OutlineFillMixin, Extr
             if not self.stop_flag:
                 with self._perf.span("repair") if self._perf is not None else contextlib.nullcontext():
                     self._run_post_draw_repair(baseline_rgb)
+            self._park_cursor_off_canvas()
             self._record_drawing_duration()
             return DrawingPhase.COMPLETED
         elif self.current_color_index >= len(self.color_palette):
@@ -9013,6 +9062,7 @@ class OlegPainter(DynamicBrushMixin, PostDrawRepairMixin, OutlineFillMixin, Extr
             if not self.stop_flag:
                 with self._perf.span("repair") if self._perf is not None else contextlib.nullcontext():
                     self._run_post_draw_repair(baseline_rgb)
+            self._park_cursor_off_canvas()
             self._record_drawing_duration()
             return DrawingPhase.COMPLETED
         else:
@@ -9103,6 +9153,38 @@ class OlegPainter(DynamicBrushMixin, PostDrawRepairMixin, OutlineFillMixin, Extr
             regions_done = 0
         regions_total = int(getattr(self, "_eta_total_regions", 0) or 0)
         return done_px, int(total_px), regions_done, max(regions_total, regions_done)
+
+    _PARK_GAP = 40
+
+    def _park_cursor_off_canvas(self) -> None:
+        """Move the pointer (no click) just outside the finished canvas, so the
+        game cursor does not cover the drawing when the user looks or records."""
+        region = getattr(self, "draw_region", None)
+        if not region or self.stop_flag:
+            return
+        try:
+            import ctypes
+            metrics = ctypes.windll.user32.GetSystemMetrics
+            left, top, width, height = (int(metrics(i)) for i in (76, 77, 78, 79))
+        except Exception:
+            left, top, width, height = -10 ** 6, -10 ** 6, 2 * 10 ** 6, 2 * 10 ** 6
+        x0, y0, w, h = (int(v) for v in region)
+        y = min(max(y0 + h // 2, top), top + height - 1)
+        x = x0 + w + self._PARK_GAP
+        if x >= left + width:
+            x = x0 - self._PARK_GAP
+        if x < left:
+            # The canvas fills the screen width: go below or above it instead.
+            x = x0 + w // 2
+            y = y0 + h + self._PARK_GAP
+            if y >= top + height:
+                y = y0 - self._PARK_GAP
+            if y < top:
+                return
+        try:
+            self._move_abs(x, y)
+        except Exception as exc:
+            self._log(f"Cursor not moved off the canvas: {exc}")
 
     def _record_drawing_duration(self) -> float | None:
         """Snapshot the session's wall time (pauses excluded) BEFORE the start

@@ -846,7 +846,7 @@ class DynamicBrushMixin:
                 break
             probe = self._dynamic_brush_v2_probe(v_pred, int(px), int(py), patch_half, region_rect=region_rect)
             if not isinstance(probe, dict):
-                break
+                continue                  # one unreadable stamp: the next round stamps again
             samples.append(self._dynamic_brush_v2_make_sample(v_pred, probe))
             r_measured = float(probe["radius_px"])
             relative_error = abs(r_measured - r_target) / max(1.0, r_target)

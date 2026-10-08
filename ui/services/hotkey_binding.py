@@ -7,7 +7,8 @@ from __future__ import annotations
 import logging
 import time  # noqa: F401
 
-from PySide6.QtCore import QObject, QThread, Signal, Slot, QTimer, QCoreApplication  # noqa: F401
+from PySide6.QtCore import QObject, QThread, Signal, Slot, QTimer, QCoreApplication, Qt  # noqa: F401
+from PySide6.QtGui import QKeySequence
 
 try:
     from ui.helpers.global_hotkey import GlobalHotkeyManager, HotkeyRegistrationError  # noqa: F401
@@ -113,7 +114,31 @@ class HotkeyBindingMixin:
             definition = definition_for_code(code)
         except KeyError:
             return False, f"Неизвестное действие горячей клавиши: {code}"
+        try:
+            problem = self._user_hotkey_problem(definition, sequence)
+        except ValueError as error:
+            return False, f"Не удалось изменить горячие клавиши: {error}"
+        if problem:
+            return False, problem
         return self.apply_hotkeys({definition.scope: {code: sequence}})
+
+    def _user_hotkey_problem(self, definition, sequence) -> str:
+        """Rules for a key the user assigns; saved profiles still load as they are."""
+        normalized = self._normalize_sequence(sequence)
+        if not normalized:
+            # Drawing and learning minimise the window: this key is the only way to stop them.
+            return ("Клавишу «Стоп» нельзя отключить: пока идёт рисунок, окно свёрнуто, и остановить его можно только ею."
+                    if definition.code == "stop" else "")
+        if definition.scope != "global":
+            return ""
+        combo = QKeySequence(normalized)[0]
+        if combo.keyboardModifiers() & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier):
+            return ""
+        if Qt.Key_F1.value <= combo.key().value <= Qt.Key_F35.value or combo.key() in (Qt.Key_Pause, Qt.Key_ScrollLock):
+            return ""
+        # A plain or Shift+ key is not swallowed: it fires while typing in a chat or a game.
+        return (f"{normalized} сработает, пока вы печатаете в чате или другой программе. "
+                "Для глобальной клавиши выберите F1–F12 или сочетание с Ctrl или Alt.")
 
     def reset_hotkey(self, code: str):
         try:

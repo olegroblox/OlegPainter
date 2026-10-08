@@ -27,6 +27,17 @@ ComboBox {
         rotation: control.popup.visible ? 180 : 0
         Behavior on rotation { NumberAnimation { duration: Theme.normal; easing.type: Easing.OutCubic } }
     }
+    // Options read whole: a list only as wide as its field cut «Прямые отрезки (меньше
+    // всего штрихов)» in a narrow column (audit 2026-10-05).
+    TextMetrics { id: optionMetrics; font: control.font }
+    function widestOption() {
+        let widest = 0
+        for (let i = 0; i < control.count; ++i) {
+            optionMetrics.text = control.textAt(i)
+            widest = Math.max(widest, optionMetrics.advanceWidth)
+        }
+        return Math.ceil(widest)
+    }
     contentItem: Text {
         text: control.displayText
         font: control.font
@@ -52,6 +63,10 @@ ComboBox {
         objectName: "choicePopup"
         y: control.height + 5
         width: control.width
+        onAboutToShow: {
+            const window = control.Window.window
+            width = Math.min(Math.max(control.width, control.widestOption() + 64), window ? window.width - 16 : control.width)
+        }
         padding: 5
         implicitHeight: Math.min(contentItem.implicitHeight + 10, 280)
         margins: 8

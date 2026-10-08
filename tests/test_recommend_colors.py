@@ -41,6 +41,20 @@ def test_a_real_grey_band_between_black_and_white_is_a_colour():
     assert _count(img) == 3
 
 
+def test_a_small_eye_far_from_every_colour_is_kept():
+    # a whale's eye: white and pupil each ~0.2 % of the picture (live Rust 2026-10-08)
+    img = Image.new("RGBA", (800, 400), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.ellipse((20, 20, 780, 380), fill=(12, 114, 186, 255))
+    d.ellipse((300, 150, 322, 172), fill=(253, 254, 254, 255))
+    d.ellipse((330, 150, 352, 172), fill=(34, 30, 31, 255))
+    assert _count(img) == 3
+    # a tiny dot (under 0.1 %) or a close shade stays out
+    d.ellipse((500, 200, 506, 206), fill=(255, 0, 0, 255))
+    d.ellipse((550, 150, 580, 180), fill=(20, 120, 190, 255))
+    assert _count(img) == 3
+
+
 def _mode(img):
     e = OlegPainter(status_callback=lambda m: None)
     e.set_image_from_pil(img.convert("RGBA"), "x")

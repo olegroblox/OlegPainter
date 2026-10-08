@@ -17,13 +17,16 @@ ColumnLayout {
     readonly property var modeHints: ({
         slider: qsTr("Обведите дорожку ползунка размера от одного конца до другого. Направление увеличения программа определит по пробным мазкам."),
         text: brush.text_auto === false
-              ? qsTr("Кликните по полю размера кисти. Программа проверит размеры от %1 до %2 с шагом %3.")
+              ? qsTr("Щёлкните по полю размера кисти. Программа проверит размеры от %1 до %2 с шагом %3.")
                     .arg(Number(brush.min_value).toLocaleString(Qt.locale(), "f", 1))
                     .arg(Number(brush.max_value).toLocaleString(Qt.locale(), "f", 1))
                     .arg(Number(brush.step_value).toLocaleString(Qt.locale(), "f", 1))
-              : qsTr("Кликните по полю размера кисти. Программа проверит целые размеры, начиная с 1. Если в вашей программе нужны дробные числа — задайте диапазон в «Дополнительно»."),
+              : qsTr("Щёлкните по полю размера кисти. Программа проверит целые размеры, начиная с 1. Если в вашей программе нужны дробные числа — задайте диапазон в «Дополнительно»."),
         points: qsTr("Укажите на экране кнопки готовых размеров (минимум две) и подпишите размер каждой.")
     })
+    readonly property bool trained: brush.profile_state === "ready"
+    // Learning takes the mouse: Main.qml asks first (learnConfirm).
+    signal learnRequested(string command)
     spacing: 16
 
     Card {
@@ -36,7 +39,12 @@ ColumnLayout {
                 Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted
                 text: qsTr("Большие области программа закрашивает крупной кистью, края и мелочь — самой маленькой. Для этого она один раз пробует кисть в вашей программе: три шага ниже.")
             }
-            ToggleSwitch { objectName: "brushEnabled"; text: qsTr("Использовать обученную кисть"); checked: !!editor.brush.enabled; enabled: editor.canEdit; onClicked: backend.setBrush({enabled: checked}) }
+            // Before learning there is nothing to switch on: learning turns it on itself.
+            ToggleSwitch { objectName: "brushEnabled"; text: qsTr("Использовать обученную кисть"); checked: !!editor.brush.enabled && editor.trained; enabled: editor.canEdit && editor.trained; onClicked: backend.setBrush({enabled: checked}) }
+            Label {
+                visible: !editor.trained; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font.pixelSize: 12
+                text: qsTr("Включится сама после обучения (шаг 3).")
+            }
         }
     }
 
@@ -65,6 +73,11 @@ ColumnLayout {
                     onClicked: backend.captureBrush(editor.mode === "points" ? "point" : editor.mode, Number(pointSize.text.replace(",", ".")))
                 }
                 Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: editor.controlReady ? Theme.accentText : Theme.muted; text: editor.controlReady ? qsTr("Готово") : editor.mode === "points" ? qsTr("Нужно минимум два размера") : qsTr("Ещё не указано") }
+                ActionButton {
+                    objectName: "brushShowControl"; visible: editor.controlReady; subtle: true
+                    text: qsTr("Показать"); hint: qsTr("Показать на экране, как программа поняла регулятор")
+                    enabled: editor.canEdit; onClicked: backend.showBrushCalibration()
+                }
             }
             Repeater {
                 model: editor.mode === "points" ? editor.brush.points || [] : []
@@ -87,6 +100,7 @@ ColumnLayout {
             Flow {
                 Layout.fillWidth: true; spacing: 8
                 ActionButton { objectName: "brushCaptureScratch"; text: qsTr("Выделить место"); hint: qsTr("Выделить свободное место на холсте для пробных мазков"); primary: !editor.brush.scratch_zone; enabled: editor.canEdit; onClicked: backend.captureBrush("scratch", 0) }
+                ActionButton { objectName: "brushShowScratch"; visible: !!editor.brush.scratch_zone; subtle: true; text: qsTr("Показать"); hint: qsTr("Показать на экране выбранное место"); enabled: editor.canEdit; onClicked: backend.showBrushCalibration() }
             }
             Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: editor.brush.scratch_zone ? Theme.accentText : Theme.muted; text: editor.brush.scratch_zone ? qsTr("Место выбрано: ") + editor.brush.scratch_zone[2] + " × " + editor.brush.scratch_zone[3] + " px" : qsTr("Место ещё не выбрано") }
         }
@@ -99,7 +113,9 @@ ColumnLayout {
             Label { text: qsTr("3. Обучение"); font.pixelSize: 15; font.weight: Font.DemiBold; Layout.fillWidth: true; wrapMode: Text.WordWrap }
             Label {
                 Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted
-                text: qsTr("Оставьте программу открытой и не трогайте мышь до конца обучения. Шаг рисунка подстроится под измеренную кисть. Остановить можно кнопкой «Остановить» или клавишей остановки.")
+                readonly property string stopKey: (backend.view.bindings || {}).stop || ""
+                text: qsTr("Программа сама будет нажимать на регулятор размера и рисовать пробные мазки в выбранном месте — около минуты. Оставьте программу рисования открытой и не трогайте мышь до конца. Шаг рисунка подстроится под измеренную кисть.")
+                      + (stopKey ? " " + qsTr("Остановить — клавишей %1.").arg(stopKey) : "")
             }
             RowLayout {
                 BusyIndicator { running: !!editor.learning.active; visible: running; palette.dark: Theme.accent; Layout.preferredWidth: 32; Layout.preferredHeight: 32 }
@@ -107,11 +123,17 @@ ColumnLayout {
             }
             Flow {
                 Layout.fillWidth: true; spacing: 8
-                ActionButton { objectName: "brushLearn"; text: editor.brush.profile_state === "ready" ? qsTr("Обучить заново") : qsTr("Обучить кисть"); primary: true; enabled: editor.canEdit && editor.controlReady && !!editor.brush.scratch_zone && !!backend.view.area_selected && !backend.view.preview_busy; onClicked: backend.brushCommand("learn") }
+                ActionButton { objectName: "brushLearn"; text: editor.brush.profile_state === "ready" ? qsTr("Обучить заново") : qsTr("Обучить кисть"); primary: true; enabled: editor.canEdit && !editor.brush.learn_blocker; onClicked: editor.learnRequested("learn") }
                 ActionButton { objectName: "brushLearnSpeed"; text: qsTr("Подобрать только скорость"); hint: qsTr("Без регулятора размера: паузы, при которых программа не теряет штрихи")
-                               enabled: editor.canEdit && !!editor.brush.scratch_zone && !!backend.view.area_selected && !backend.view.preview_busy
-                               onClicked: backend.brushCommand("learn_speed") }
+                               enabled: editor.canEdit && !editor.brush.speed_blocker
+                               onClicked: editor.learnRequested("learn_speed") }
                 ActionButton { text: qsTr("Сбросить калибровку"); enabled: editor.canEdit; onClicked: reset.open() }
+            }
+            Label {
+                objectName: "brushLearnBlocked"
+                visible: editor.canEdit && !editor.learning.active && !!editor.brush.learn_blocker
+                Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font.pixelSize: 12
+                text: editor.brush.learn_blocker || ""
             }
         }
     }
@@ -145,9 +167,12 @@ ColumnLayout {
     }
 
     SurfaceDialog {
-        id: reset; parent: Overlay.overlay; anchors.centerIn: parent; modal: true
+        id: reset; objectName: "brushResetDialog"; parent: Overlay.overlay; anchors.centerIn: parent; modal: true
         title: qsTr("Сбросить калибровку кисти?"); standardButtons: Dialog.Yes | Dialog.No
-        Label { text: qsTr("Координаты и обученный профиль будут удалены.") }
+        ColumnLayout {
+            width: parent.width
+            Label { text: qsTr("Координаты и обученный профиль будут удалены."); Layout.fillWidth: true; wrapMode: Text.WordWrap }
+        }
         onAccepted: backend.brushCommand("reset")
     }
 }

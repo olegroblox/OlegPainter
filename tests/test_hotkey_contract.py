@@ -116,7 +116,7 @@ def test_atomic_swap_disable_and_reset(service):
 
 
 @pytest.mark.parametrize('first,second', [
-    ('Return', 'Enter'), ('Ctrl+?', 'Ctrl+Shift+/'), ('Ctrl+Ж', 'Ctrl+;'),
+    ('Ctrl+Return', 'Ctrl+Enter'), ('Ctrl+?', 'Ctrl+Shift+/'), ('Ctrl+Ж', 'Ctrl+;'),
 ])
 def test_physical_aliases_conflict_across_scopes(service, first, second):
     assert service.set_hotkey('select_area', first)[0]
@@ -288,3 +288,18 @@ def test_saved_bracket_recording_keys_move_to_f6_f7_unless_taken():
     assert migrated["global"]["record_post_color_actions"] == "]"
     custom = {"global": {"record_pre_color_actions": "Ctrl+1"}}
     assert migrate_legacy_hotkeys(custom)["global"]["record_pre_color_actions"] == "Ctrl+1"
+
+
+def test_user_keys_keep_typing_and_stopping_safe(service):
+    """A plain letter fired while typing in a chat; an empty stop key left no way to
+    stop a drawing with the window minimised (audit 2026-10-05)."""
+    ok, message = service.set_hotkey("stop", "")
+    assert not ok and "«Стоп»" in message
+    assert service.get_hotkeys()["global"]["stop"] == "F4"
+    for sequence in ("P", "Shift+P", "[", "Return"):
+        ok, message = service.set_hotkey("select_area", sequence)
+        assert not ok and "F1–F12" in message, sequence
+    for sequence in ("F11", "Ctrl+P", "Alt+Shift+1", "Pause"):
+        assert service.set_hotkey("select_area", sequence)[0], sequence
+    assert service.set_hotkey("open_file", "P")[0]          # a key of this window only
+    assert service.set_hotkey("select_area", "")[0]        # other actions may be turned off

@@ -51,7 +51,9 @@ class BrushLearningJob:
         zone = engine.dynamic_brush_scratch_zone
         if engine.pen_split_strokes:
             return learn_stroke_gap(engine, zone, brush_radius_px=radius, status=self._status)
-        return learn(engine, zone, brush_radius_px=radius, status=self._status)
+        # «Подобрать только скорость» keeps the user's grid: the pace must fill it solid
+        return learn(engine, zone, brush_radius_px=radius, status=self._status,
+                     fill_cell=max(1, int(engine.brush_size)))
 
     def run(self):
         engine = None
@@ -72,7 +74,7 @@ class BrushLearningJob:
             with engine._owned_automation_input("обучение кисти", target_region=engine.dynamic_brush_scratch_zone):
                 if not engine.learn_dynamic_brush_profile():
                     if not self.cancelled.is_set():
-                        self.error = self.last_message or "Кисть не прошла проверку. Проверьте регулятор и свободное место в тестовой зоне."
+                        self.error = self.last_message or "Кисть не прошла проверку. Проверьте регулятор и свободное место для проб."
                     return
                 if not self.cancelled.is_set():
                     self.profile = deepcopy(engine.dynamic_brush_profile)

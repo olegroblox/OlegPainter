@@ -15,6 +15,14 @@ Button {
     property color glyphColor: foreground
     implicitHeight: 38
     Layout.minimumWidth: 0
+    // A Flow (a positioner, not a layout) keeps a child's natural width: on a narrow
+    // window or with enlarged Windows text a long button ran past the edge. Never
+    // wider than the row there — the caption elides and the hint shows it in full.
+    Binding on width {
+        when: !!control.parent && control.parent.flow !== undefined && control.parent.columns === undefined
+        // A Flow not sized yet has width 0: the full button then, or the row never grows.
+        value: control.parent && control.parent.width > 0 ? Math.min(control.implicitWidth, control.parent.width) : control.implicitWidth
+    }
     leftPadding: text === "" ? 8 : 14
     rightPadding: text === "" ? 8 : 14
     font.pixelSize: 13

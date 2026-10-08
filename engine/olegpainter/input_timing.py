@@ -42,6 +42,22 @@ _DIFF_THRESHOLD = 40
 # Phone in Yandex Browser kept every stroke even at ~0 ms, the embedded Claude
 # browser lost strokes below 12 ms: it depends on the machine and the browser.
 GAP_LADDER = (0.0005, 0.002, 0.005, 0.01, 0.02, 0.035)
+# Programs that stamp where they sample the cursor: rows a stamp-diameter apart
+# left stripes (live Spray Paint! 2026-10-07: the 0.1 stamp is 5 x 4 px under the
+# tilted camera, rows of 4 px came out striped at any pace, rows of 2 px whole).
+STAMP_ROW_OVERLAP = 0.6
+# The fill probe: a square filled by the engine's own route at the drawing's row
+# pitch. A straight line hid 2-6 px holes between stamps (its check looks around
+# every point), so 1 ms passed and real fills got gaps; the square read 94-98 % at
+# 1 ms, 100 % from 1.5-2 ms.
+_FILL_PROBE_PX = 40
+_FILL_COVERAGE = 0.995
+_FILL_LADDER_FACTOR = 1.5
+
+
+def stamp_row_pitch(stamp_radius_px: float) -> int:
+    """Row pitch (grid cell, px) for a stamping program: rows overlap by ~40 %."""
+    return max(1, int(math.floor(2.0 * max(0.5, float(stamp_radius_px)) * STAMP_ROW_OVERLAP)))
 
 
 def changed_mask(before, after) -> np.ndarray:
@@ -221,7 +237,7 @@ def _settled_patch(engine, cx: int, cy: int, half: int, *, quiet: float = 1.0, t
     return previous
 
 
-def learn(engine, zone, *, brush_radius_px: float = 1.0, status=None) -> dict | None:
+def learn(engine, zone, *, brush_radius_px: float = 1.0, status=None, fill_cell: int | None = None) -> dict | None:
     """Probe the target inside `zone` (x, y, w, h). Returns the recommended
     pacing or None when stamps were not visible (then nothing is changed)."""
     reach = max(2.0, brush_radius_px + 1.5)
@@ -229,8 +245,8 @@ def learn(engine, zone, *, brush_radius_px: float = 1.0, status=None) -> dict | 
     # All spots at once from one capture: a thin probe barely changes a spot's
     # average, so asking again after each probe returned the same place and the
     # zigzags were drawn on top of each other.
-    # + jump probe, two press-trail probes, two last-move probes, up to four straight-line checks
-    spots = list(engine._dynamic_brush_v2_clean_spots(zone, need, len(DWELL_LADDER) + len(LIFT_LADDER) + 9))
+    # + jump probe, two press-trail probes, two last-move probes, up to six fill checks
+    spots = list(engine._dynamic_brush_v2_clean_spots(zone, need, len(DWELL_LADDER) + len(LIFT_LADDER) + 11))
 
     def probe(draw):
         if not spots:
@@ -251,7 +267,7 @@ def learn(engine, zone, *, brush_radius_px: float = 1.0, status=None) -> dict | 
     nudge = _learn_press_nudge(engine, probe, reach, status)
     engine.pen_press_nudge = bool(nudge)
     try:
-        return _learn_rest(engine, probe, reach, brush_radius_px, status, start_end, nudge)
+        return _learn_rest(engine, probe, reach, brush_radius_px, status, start_end, nudge, fill_cell)
     finally:
         engine.pen_press_nudge = saved_nudge
 
@@ -304,7 +320,7 @@ def _last_move_needs_step(engine, probe, reach) -> bool:
     return False
 
 
-def _learn_rest(engine, probe, reach, brush_radius_px, status, start_end, nudge):
+def _learn_rest(engine, probe, reach, brush_radius_px, status, start_end, nudge, fill_cell=None):
 
     def jump(cx, cy):
         a, b = (cx - 40, cy), (cx + 40, cy)
@@ -345,7 +361,8 @@ def _learn_rest(engine, probe, reach, brush_radius_px, status, start_end, nudge)
     choice["trials"] = [{"dwell": d, "ok": ok} for d, ok in results]
     choice["press_nudge"] = bool(nudge)
     if not interpolates:
-        _check_line_speed(engine, probe, choice, reach, status)
+        # the pitch the drawing will use: the user's own grid, or overlapping stamp rows
+        _check_fill_speed(engine, probe, choice, fill_cell or stamp_row_pitch(brush_radius_px), reach, status)
     if brush_radius_px <= _LIFT_MAX_RADIUS_PX:
         lifts = _learn_lift(engine, probe, choice, brush_radius_px, reach, status)
         if lifts:
@@ -354,32 +371,71 @@ def _learn_rest(engine, probe, reach, brush_radius_px, status, start_end, nudge)
     return choice
 
 
-def _check_line_speed(engine, probe, choice, reach, status, attempts: int = 4) -> None:
-    """Programs that only stamp where they sample the cursor drop parts of fast
-    straight strokes (Spray Paint: gaps above ~1000 px/s at the smallest size).
-    Slow the per-hop dwell down until a straight line comes out whole."""
-    checks = []
+def fill_coverage(mask: np.ndarray, corner: tuple[int, int], side: int, inset: int) -> float:
+    """Painted share of the square's interior (`inset` px in from every edge)."""
+    x0, y0 = corner
+    inner = mask[y0 + inset:y0 + side - inset, x0 + inset:x0 + side - inset]
+    return float(inner.mean()) if inner.size else 0.0
+
+
+def _fill_square_with_route(engine, x0: int, y0: int, side: int, cell: int, dwell: float, step: int) -> None:
+    """A solid square drawn by the engine's «Прямые отрезки» route at the given
+    row pitch, as a real fill of one colour."""
+    n = max(2, side // cell)
+    names = ("cluster_map", "drawn_mask", "brush_size", "_last_pen_cell", "_route_exit_cell",
+             "draw_delay", "pen_max_step", "area_fill_delay", "drawing_enabled")
+    saved = {name: getattr(engine, name, None) for name in names}
+    try:
+        engine.cluster_map = np.zeros((n, n), np.int32)
+        engine.drawn_mask = np.zeros((n, n), dtype=bool)
+        engine.brush_size = cell
+        engine._last_pen_cell = engine._route_exit_cell = None
+        engine.draw_delay, engine.pen_max_step, engine.area_fill_delay = dwell, step, 0.0
+        engine.drawing_enabled = True
+        engine.line_cover_fill_current_color(np.full((n, n), 255, np.uint8), x0, y0, 0)
+        time.sleep(0.05)
+    finally:
+        engine._mouse_up_with_settle()
+        for name, value in saved.items():
+            setattr(engine, name, value)
+
+
+def _check_fill_speed(engine, probe, choice, cell, reach, status, attempts: int = 6) -> None:
+    """Programs that only stamp where they sample the cursor drop stamps on fast
+    strokes. Fill a small square at the drawing's row pitch and slow the per-hop
+    dwell down until it comes out solid twice in a row."""
+    side = (_FILL_PROBE_PX // cell) * cell
+    inset = int(math.ceil(reach))
+    dwell = max(0.001, float(choice["draw_delay"]))
+    checks, passed = [], None
     for _ in range(attempts):
         if engine._automation_cancelled():
             break
         if status:
-            status(f"Проверяем прямую линию: пауза {choice['draw_delay'] * 1000:.1f} мс на шаг…")
-        ends = {}
+            status(f"Проверяем заливку: пауза {dwell * 1000:.1f} мс на шаг…")
+        geometry = {}
 
-        def line(cx, cy):
-            ends["line"] = ((cx - 36, cy), (cx + 36, cy))
-            _stroke(engine, list(ends["line"]), choice["draw_delay"], choice["pen_max_step"])
+        def square(cx, cy, dwell=dwell):
+            geometry["corner"] = (cx - side // 2, cy - side // 2)
+            _fill_square_with_route(engine, cx - side // 2, cy - side // 2, side, cell, dwell, choice["pen_max_step"])
 
-        mask, origin = probe(line)
+        mask, origin = probe(square)
         if mask is None:
             break
-        (ax, ay), (bx, by) = ends["line"]
-        ok = line_is_continuous(mask, (ax - origin[0], ay - origin[1]), (bx - origin[0], by - origin[1]), reach)
-        checks.append({"dwell": choice["draw_delay"], "ok": ok})
+        corner = (geometry["corner"][0] - origin[0], geometry["corner"][1] - origin[1])
+        coverage = fill_coverage(mask, corner, side, inset)
+        ok = coverage >= _FILL_COVERAGE
+        checks.append({"dwell": dwell, "coverage": round(coverage, 4), "ok": ok})
+        if ok and passed == dwell:
+            break                      # solid twice at this pace
         if ok:
-            break
-        choice["draw_delay"] = round(max(0.002, choice["draw_delay"] * 2), 4)
-    choice["line_checks"] = checks
+            passed = dwell             # confirm once more before trusting it
+            continue
+        passed = None
+        dwell = round(dwell * _FILL_LADDER_FACTOR, 4)
+    choice["draw_delay"] = dwell
+    choice["fill_cell"] = cell
+    choice["fill_checks"] = checks
 
 
 def _learn_lift(engine, probe, choice, brush_radius_px, reach, status) -> list[tuple[float, bool]]:

@@ -136,7 +136,10 @@ class PostDrawRepairMixin:
 
     # Largest per-channel difference at which a canvas pixel counts as already
     # the target color (screen capture of a solid fill is exact or off by a few units).
-    _CANVAS_MATCH_TOLERANCE = 8
+    # Speed Draw!'s canvas is a faint pink #FDF5F5: at 8 a picture's white background
+    # (#FEFEFE, 9 off) was painted over it for 17 s (live 2026-10-07). 14 is still
+    # invisible on screen.
+    _CANVAS_MATCH_TOLERANCE = 14
 
     def _mark_canvas_matching_cells(self, canvas_rgb) -> int:
         """Count cells whose every canvas pixel already shows the target color as drawn.

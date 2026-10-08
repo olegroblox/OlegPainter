@@ -61,7 +61,7 @@ ApplicationWindow {
         background: Rectangle { color: Theme.surface; radius: 16; border.color: Theme.border }
         contentItem: ColumnLayout {
             spacing: 16
-            Label { text: qsTr("Завершение работы"); font.pixelSize: 22; font.weight: Font.DemiBold }
+            Label { text: qsTr("Завершение работы"); font.pixelSize: 22; font.weight: Font.DemiBold; Layout.fillWidth: true; wrapMode: Text.WordWrap }
             BusyIndicator { running: !root.appState.close_error; visible: running; palette.dark: Theme.accent; Layout.alignment: Qt.AlignHCenter }
             Label {
                 Layout.fillWidth: true; wrapMode: Text.WordWrap
@@ -76,6 +76,7 @@ ApplicationWindow {
     }
     onPageChanged: {
         if (page !== 7) backend.setQuickStartSeen(true)
+        else backend.setQuickStartReturn(false)
         backend.cancelRecording()
         if (scroll.contentItem) scroll.contentItem.contentY = 0
         if (page === 2) backend.refreshPresets()
@@ -147,12 +148,16 @@ ApplicationWindow {
     }
     SurfaceDialog {
         id: resetHotkeys
+        objectName: "resetHotkeysDialog"
         anchors.centerIn: parent
         modal: true
         title: qsTr("Сбросить все горячие клавиши?")
         standardButtons: Dialog.Yes | Dialog.No
         onAccepted: backend.resetAllHotkeys()
-        Label { text: qsTr("Все сочетания вернутся к исходным.") }
+        ColumnLayout {
+            width: parent.width
+            Label { text: qsTr("Все сочетания вернутся к исходным."); Layout.fillWidth: true; wrapMode: Text.WordWrap }
+        }
     }
     SurfaceDialog {
         id: whatsNewDialog
@@ -163,17 +168,27 @@ ApplicationWindow {
         title: qsTr("Что нового в версии %1").arg(root.backend.appVersion)
         standardButtons: Dialog.Ok
         onClosed: root.backend.dismissWhatsNew()
-        ColumnLayout {
-            width: parent.width; spacing: 8
-            Repeater {
-                model: root.backend.whatsNew
-                Label { required property string modelData; text: "• " + modelData; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+        // Taller than a small window: the list scrolls and the button stays on screen.
+        height: Math.min(implicitHeight, (parent ? parent.height : root.height) - 24)
+        contentItem: ScrollView {
+            id: whatsNewScroll
+            implicitHeight: whatsNewContent.implicitHeight
+            clip: true; contentWidth: availableWidth
+            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+            ColumnLayout {
+                id: whatsNewContent
+                width: whatsNewScroll.availableWidth; spacing: 8
+                Repeater {
+                    model: root.backend.whatsNew
+                    Label { required property string modelData; text: "• " + modelData; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+                }
             }
         }
         Component.onCompleted: if (root.backend.whatsNewDue) open()
     }
     SurfaceDialog {
         id: overwritePreset
+        objectName: "overwritePresetDialog"
         property string slug: ""
         property string name: ""
         anchors.centerIn: parent
@@ -181,52 +196,278 @@ ApplicationWindow {
         title: qsTr("Перезаписать профиль?")
         standardButtons: Dialog.Yes | Dialog.No
         onAccepted: backend.preset("overwrite", slug)
-        Label { text: qsTr("В профиль «%1» запишутся текущие настройки тех же разделов.").arg(overwritePreset.name); wrapMode: Text.WordWrap; width: 320 }
+        ColumnLayout {
+            width: parent.width
+            Label { text: qsTr("В профиль «%1» запишутся текущие настройки тех же разделов.").arg(overwritePreset.name); Layout.fillWidth: true; wrapMode: Text.WordWrap }
+        }
     }
     SurfaceDialog {
         id: deletePreset
+        objectName: "deletePresetDialog"
         property string slug: ""
+        property string name: ""
         anchors.centerIn: parent
         modal: true
         title: qsTr("Удалить профиль?")
         standardButtons: Dialog.Yes | Dialog.No
         onAccepted: backend.preset("delete", slug)
-        Label { text: qsTr("Сохранённый профиль будет удалён.") }
+        ColumnLayout {
+            width: parent.width
+            Label { text: qsTr("Профиль «%1» будет удалён вместе с резервной копией. Вернуть его будет нельзя.").arg(deletePreset.name); Layout.fillWidth: true; wrapMode: Text.WordWrap }
+        }
     }
-    // Interception is a third-party kernel driver: install or remove it only after an informed yes.
+    // Applying replaces the area, calibrations, colours and layers: say which ones first.
+    SurfaceDialog {
+        id: applyPreset
+        objectName: "applyPresetDialog"
+        property string slug: ""
+        property string name: ""
+        property string categories: ""
+        anchors.centerIn: parent
+        modal: true
+        title: qsTr("Применить профиль?")
+        standardButtons: Dialog.Yes | Dialog.No
+        onAccepted: backend.preset("apply", slug)
+        ColumnLayout {
+            width: parent.width
+            Label {
+                text: applyPreset.categories ? qsTr("Настройки из «%1» заменят текущие: %2.").arg(applyPreset.name).arg(applyPreset.categories)
+                                             : qsTr("Настройки из «%1» заменят текущие.").arg(applyPreset.name)
+                Layout.fillWidth: true; wrapMode: Text.WordWrap
+            }
+            Label {
+                text: qsTr("Чтобы потом вернуть нынешние, сначала сохраните их в новый профиль.")
+                Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font.pixelSize: 12
+            }
+        }
+    }
+    // Brush learning and the speed probe take the mouse and click in the user's program:
+    // say what will happen before it starts (owner, 2026-10-05: «оно само начало тыкать»).
+    SurfaceDialog {
+        id: learnConfirm
+        objectName: "learnConfirm"
+        property string command: "learn"
+        readonly property bool speed: command === "learn_speed"
+        readonly property string stopKey: (root.backend.view.bindings || {}).stop || ""
+        anchors.centerIn: parent
+        width: Math.min(520, root.width - 40)
+        modal: true
+        title: speed ? qsTr("Подобрать скорость?") : qsTr("Обучить кисть?")
+        standardButtons: Dialog.Yes | Dialog.No
+        onAccepted: root.backend.brushCommand(command)
+        ColumnLayout {
+            width: parent.width; spacing: 8
+            Label {
+                objectName: "learnConfirmText"
+                Layout.fillWidth: true; wrapMode: Text.WordWrap
+                text: learnConfirm.speed
+                      ? qsTr("OlegPainter возьмёт мышь и нарисует несколько пробных линий в выбранном месте холста, чтобы подобрать скорость.")
+                      : qsTr("OlegPainter возьмёт мышь: сам будет нажимать на регулятор размера кисти и рисовать пробные мазки в выбранном месте холста.")
+            }
+            Label {
+                Layout.fillWidth: true; wrapMode: Text.WordWrap
+                text: !learnConfirm.speed && (root.backend.view.brush || {}).probe_colour_auto
+                      ? qsTr("Цвет для проб программа выберет сама.")
+                      : qsTr("Сначала выберите в программе рисования тёмный цвет — пробы будут нарисованы им.")
+            }
+            Label {
+                Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted
+                text: learnConfirm.stopKey
+                      ? qsTr("Не трогайте мышь до конца. Остановить — клавишей %1.").arg(learnConfirm.stopKey)
+                      : qsTr("Не трогайте мышь до конца. Остановить — кнопкой «Стоп».")
+            }
+        }
+    }
+    // DRIVER-002: Interception is a third-party kernel driver. It is installed, repaired or
+    // removed only after the warnings are read and every box is ticked.
     SurfaceDialog {
         id: driverConsent
         objectName: "driverConsent"
         property string command: "install"
+        readonly property var driver: root.backend.inputDriver
+        readonly property bool removing: command === "uninstall"
+        // Memory Integrity: Windows would refuse the driver and leave the devices without one.
+        readonly property bool hvciBlocks: !removing && !!driver.hvci
+        readonly property bool allChecked: removing
+                                           ? removeDrawing.checked && removeOthers.checked && removeRestart.checked
+                                           : riskThirdParty.checked && riskGames.checked && riskRecovery.checked && riskRestart.checked
         anchors.centerIn: parent
-        width: Math.min(560, root.width - 40)
+        width: Math.min(600, root.width - 40)
         modal: true
-        title: command === "uninstall" ? qsTr("Удалить драйвер Interception?") : qsTr("Установить драйвер Interception?")
+        title: removing ? qsTr("Удалить драйвер Interception?")
+                        : command === "repair" ? qsTr("Починить драйвер Interception?") : qsTr("Установить драйвер Interception?")
+        standardButtons: Dialog.NoButton
+        height: Math.min(implicitHeight, (parent ? parent.height : root.height) - 24)
+        onAboutToShow: {
+            for (const box of [riskThirdParty, riskGames, riskRecovery, riskRestart, removeDrawing, removeOthers, removeRestart])
+                box.checked = false
+            driverScroll.contentItem.contentY = 0
+        }
+        footer: Item {
+            implicitHeight: consentFooter.implicitHeight + 32
+            ColumnLayout {
+                id: consentFooter
+                anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 16; rightMargin: 16 }
+                spacing: 8
+                // Beside the buttons: the boxes are below the fold in a small window.
+                Label {
+                    objectName: "driverConsentHint"
+                    visible: !driverConsent.allChecked && !driverConsent.hvciBlocks
+                    Layout.fillWidth: true; wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignRight
+                    color: Theme.muted; font.pixelSize: 12
+                    text: qsTr("Прочитайте предупреждения и отметьте все пункты — тогда кнопка станет активной.")
+                }
+                ButtonRow {
+                    id: consentButtons
+                    Layout.fillWidth: true
+                    layoutDirection: Qt.RightToLeft
+                    ActionButton {
+                        objectName: "driverConsentConfirm"
+                        primary: !driverConsent.removing; danger: driverConsent.removing
+                        enabled: driverConsent.allChecked && !driverConsent.hvciBlocks && !driverConsent.driver.busy
+                        text: driverConsent.removing ? qsTr("Удалить драйвер")
+                              : driverConsent.command === "repair" ? qsTr("Починить")
+                              : driverConsent.driver.has_installer ? qsTr("Установить") : qsTr("Скачать и установить")
+                        onClicked: { driverConsent.close(); root.backend.driverAction(driverConsent.command) }
+                    }
+                    ActionButton { objectName: "driverConsentCancel"; text: qsTr("Отмена"); onClicked: driverConsent.close() }
+                }
+            }
+        }
+        contentItem: ScrollView {
+            id: driverScroll
+            implicitHeight: driverContent.implicitHeight
+            clip: true; contentWidth: availableWidth
+            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+            ColumnLayout {
+                id: driverContent
+                width: driverScroll.availableWidth; spacing: 10
+                Label {
+                    Layout.fillWidth: true; wrapMode: Text.WordWrap
+                    text: qsTr("Interception — сторонний драйвер ввода (автор — Francisco Lopes). Он не входит в OlegPainter: мы его не разрабатываем и не отвечаем за его работу и ошибки.")
+                }
+                Label {
+                    visible: !driverConsent.removing
+                    Layout.fillWidth: true; wrapMode: Text.WordWrap; font.weight: Font.DemiBold
+                    text: qsTr("Ставить его или нет — решаете вы. Без драйвера OlegPainter не сможет рисовать, но всё остальное работает.")
+                }
+                Label {
+                    objectName: "driverConsentHvci"
+                    visible: driverConsent.hvciBlocks
+                    Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.danger; font.weight: Font.DemiBold
+                    text: qsTr("Включена «Целостность памяти» (изоляция ядра). Interception с ней несовместим: Windows не загрузит драйвер, а мышь и клавиатура могут перестать работать после перезагрузки. Поэтому установка выключена.")
+                }
+                Label {
+                    visible: !!driverConsent.driver.location && driverConsent.command !== "install"
+                    Layout.fillWidth: true; wrapMode: Text.Wrap; color: Theme.muted; font.pixelSize: 13
+                    text: qsTr("Драйвер сейчас: %1").arg(driverConsent.driver.location || "")
+                }
+                Label {
+                    visible: driverConsent.removing && (!!driverConsent.driver.custom_location || !!driverConsent.driver.renamed)
+                    Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font.pixelSize: 13
+                    text: qsTr("Драйвер ставила другая программа, не по инструкции автора. Установщик автора уберёт драйвер из Windows, а файлы в чужой папке могут остаться — они безвредны.")
+                }
+                Label { text: qsTr("Что произойдёт"); font.weight: Font.DemiBold; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+                Label {
+                    Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 13
+                    text: driverConsent.driver.has_installer
+                          ? qsTr("1. Официальный установщик автора уже скачан и проверен по контрольной сумме SHA-256.")
+                          : qsTr("1. Программа скачает официальный архив Interception с GitHub автора (0,4 МБ) и сверит контрольную сумму SHA-256: подменённый или повреждённый файл не запустится.")
+                }
+                Label {
+                    Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 13
+                    text: qsTr("2. Windows спросит разрешение администратора. У установщика автора нет цифровой подписи, поэтому издатель будет «неизвестен» — проверьте, что запускается install-interception.exe, и нажмите «Да».")
+                }
+                Label {
+                    Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 13
+                    text: driverConsent.removing
+                          ? qsTr("3. Драйвер выгрузится после перезагрузки компьютера, до неё он продолжит работать.")
+                          : qsTr("3. Драйвер заработает после перезагрузки компьютера — программа предложит её сделать.")
+                }
+                Rectangle {
+                    objectName: "driverConsentRisks"
+                    Layout.fillWidth: true
+                    implicitHeight: risks.implicitHeight + 20
+                    radius: 10; color: Theme.dangerSurface; border.color: Theme.danger
+                    ColumnLayout {
+                        id: risks
+                        anchors.fill: parent; anchors.margins: 10; spacing: 6
+                        Label {
+                            visible: !driverConsent.removing
+                            Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 13; color: Theme.text
+                            text: qsTr("Драйвер встраивается в работу всех мышей, клавиатур и тачпада. Иногда после переподключения устройства или выхода из сна ввод пропадает до перезагрузки.")
+                        }
+                        Label {
+                            visible: !driverConsent.removing
+                            Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 13; color: Theme.text
+                            text: qsTr("Никогда не удаляйте файлы keyboard.sys и mouse.sys вручную — только кнопкой «Удалить драйвер» или установщиком автора. Иначе после перезагрузки перестанут работать мышь и клавиатура.")
+                        }
+                        Label {
+                            objectName: "driverConsentGames"
+                            visible: !driverConsent.removing
+                            Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 13; color: Theme.text
+                            text: (driverConsent.driver.anticheats || []).length
+                                  ? qsTr("На этом компьютере есть античиты: %1. Многие игры с ними работают с драйвером без проблем, но гарантий нет: античит может не пустить в игру или счесть драйвер нарушением правил. Если игра не запускается — удалите драйвер перед ней.").arg(driverConsent.driver.anticheats.join(", "))
+                                  : qsTr("Игры с античитами (Easy Anti-Cheat, Riot Vanguard, EA Javelin, FACEIT) часто работают с драйвером без проблем, но гарантий нет: античит может не пустить в игру или счесть драйвер нарушением правил. Если игра не запускается — удалите драйвер перед ней.")
+                        }
+                        Label {
+                            visible: driverConsent.removing
+                            Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 13; color: Theme.text
+                            text: qsTr("Без драйвера OlegPainter не сможет рисовать, пока вы не установите его снова.")
+                        }
+                        Label {
+                            objectName: "driverConsentUsers"
+                            visible: driverConsent.removing
+                            Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 13; color: Theme.text
+                            text: (driverConsent.driver.users || []).length
+                                  ? qsTr("Драйвер общий для всех программ. На этом компьютере им пользуется %1 — она тоже перестанет управлять мышью и клавиатурой.").arg(driverConsent.driver.users.join(", "))
+                                  : qsTr("Драйвер общий для всех программ. Если им пользуется другая программа (например, Veyon или AutoHotInterception), она тоже перестанет управлять мышью и клавиатурой.")
+                        }
+                    }
+                }
+                Label {
+                    visible: !driverConsent.removing
+                    Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 13
+                    text: qsTr("Если после перезагрузки не работают мышь и клавиатура: дважды прервите загрузку Windows кнопкой питания — на третий раз откроется среда восстановления. Выберите «Поиск и устранение неисправностей» → «Дополнительные параметры» → «Восстановление системы» и точку, созданную до установки.")
+                }
+                ButtonRow {
+                    visible: !driverConsent.removing
+                    Layout.fillWidth: true
+                    ActionButton { objectName: "driverRestorePoint"; text: qsTr("Создать точку восстановления…"); onClicked: root.backend.driverAction("restore_point") }
+                }
+                Label {
+                    visible: !driverConsent.removing
+                    Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font.pixelSize: 12
+                    text: qsTr("В окне Windows выберите диск C:, нажмите «Создать…» и введите любое название. Если кнопка неактивна, сначала включите защиту кнопкой «Настроить…».")
+                }
+                ConsentCheck { id: riskThirdParty; objectName: "driverRiskThirdParty"; visible: !driverConsent.removing; text: qsTr("Решение принимаю я: Interception — сторонний драйвер, и OlegPainter не отвечает за его работу и сбои.") }
+                ConsentCheck { id: riskGames; objectName: "driverRiskGames"; visible: !driverConsent.removing; text: qsTr("Я знаю, что античит может не пустить в игру или счесть драйвер нарушением, и принимаю этот риск на себя.") }
+                ConsentCheck { id: riskRecovery; objectName: "driverRiskRecovery"; visible: !driverConsent.removing; text: qsTr("Мне понятно, что делать, если после перезагрузки пропадут мышь и клавиатура.") }
+                ConsentCheck { id: riskRestart; objectName: "driverRiskRestart"; visible: !driverConsent.removing; text: qsTr("Я сохраню работу в других программах: после установки нужна перезагрузка.") }
+                ConsentCheck { id: removeDrawing; objectName: "driverRemoveDrawing"; visible: driverConsent.removing; text: qsTr("Я понимаю, что без драйвера OlegPainter не сможет рисовать.") }
+                ConsentCheck { id: removeOthers; objectName: "driverRemoveOthers"; visible: driverConsent.removing; text: qsTr("Я понимаю, что другие программы, которым нужен Interception, тоже перестанут работать.") }
+                ConsentCheck { id: removeRestart; objectName: "driverRemoveRestart"; visible: driverConsent.removing; text: qsTr("Я сохраню работу в других программах: удаление завершится после перезагрузки.") }
+            }
+        }
+    }
+    SurfaceDialog {
+        id: driverRestart
+        objectName: "driverRestart"
+        anchors.centerIn: parent
+        width: Math.min(500, root.width - 40)
+        modal: true
+        title: qsTr("Перезагрузить компьютер?")
         standardButtons: Dialog.Yes | Dialog.No
-        onAccepted: root.backend.driverAction(command)
+        onAccepted: root.backend.driverAction("restart")
         ColumnLayout {
             width: parent.width; spacing: 8
             Label {
                 Layout.fillWidth: true; wrapMode: Text.WordWrap
-                text: qsTr("Interception — сторонний драйвер ввода (автор — Francisco Lopes). Он не входит в OlegPainter: мы его не разрабатываем и не отвечаем за его работу и ошибки.")
+                text: qsTr("Windows перезагрузится через минуту. Сохраните работу в других программах — OlegPainter сохранит свои настройки сам.")
             }
             Label {
-                visible: driverConsent.command !== "uninstall"
-                Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.danger
-                text: qsTr("У драйвера бывают серьёзные сбои: после переподключения мыши или клавиатуры ввод может пропасть до перезагрузки, а в редких случаях Windows приходится восстанавливать. Устанавливайте его, только если согласны с этим риском.")
-            }
-            Label {
-                visible: driverConsent.command !== "uninstall"
-                Layout.fillWidth: true; wrapMode: Text.WordWrap
-                text: qsTr("Пока он установлен, не запускаются игры с античитами EasyAntiCheat, Riot Vanguard, EA (Battlefield) и FACEIT — перед ними драйвер нужно удалять.")
-            }
-            Label {
-                Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted
-                text: driverConsent.command === "uninstall"
-                      ? qsTr("Запустится официальный установщик с командой удаления. Нужны права администратора и перезагрузка. Без драйвера программа не сможет рисовать.")
-                      : (root.backend.inputDriver.can_install
-                         ? qsTr("Запустится официальный установщик автора. Windows спросит права администратора, после установки нужна перезагрузка. Удалить драйвер можно на странице «Помощь».")
-                         : qsTr("Откроется страница автора: скачайте Interception.zip и следуйте инструкции. После установки нужна перезагрузка."))
+                Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font.pixelSize: 13
+                text: qsTr("Пока минута не прошла, перезагрузку можно отменить кнопкой «Отменить перезагрузку».")
             }
         }
     }
@@ -271,12 +512,13 @@ ApplicationWindow {
                         Behavior on scale { NumberAnimation { duration: Theme.fast; easing.type: Easing.OutCubic } }
                     }
                     // Space is always reserved, so the title does not jump when the arrow fades in.
+                    // On a narrow window the icon is the only way to the pages: it shows ☰ always.
                     Glyph {
                         objectName: "sidebarChevron"
-                        name: "chevron-down"; color: Theme.text
-                        rotation: brandToggle.opensMenu ? -90 : 90
+                        name: root.narrow ? "menu" : "chevron-down"; color: Theme.text
+                        rotation: root.narrow ? 0 : brandToggle.opensMenu ? -90 : 90
                         Layout.preferredWidth: 14; Layout.preferredHeight: 14
-                        opacity: brandToggle.hovered || brandToggle.visualFocus ? 1 : 0
+                        opacity: root.narrow || brandToggle.hovered || brandToggle.visualFocus ? 1 : 0
                         Behavior on opacity { NumberAnimation { duration: Theme.fast } }
                         Behavior on rotation { NumberAnimation { duration: Theme.fast; easing.type: Easing.OutCubic } }
                     }
@@ -347,6 +589,14 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 ColumnLayout {
                     Layout.fillWidth: true; spacing: 4
+                    // A step of the quick start opened this page: one click back to the steps.
+                    ActionButton {
+                        objectName: "backToQuickStart"
+                        visible: root.backend.quickStartReturn && root.page !== 7
+                        text: qsTr("← К быстрому старту"); subtle: true
+                        Layout.leftMargin: -14
+                        onClicked: root.page = 7
+                    }
                     Label { text: [qsTr("Рисование"), qsTr("Настройки"), qsTr("Профили"), qsTr("Горячие клавиши"), qsTr("Палитра"), qsTr("Кисть"), qsTr("Слои и действия"), qsTr("Быстрый старт"), qsTr("AI"), qsTr("Помощь")][root.page]; font.pixelSize: root.compact ? 22 : Theme.titleSize; font.weight: Font.DemiBold; font.letterSpacing: -0.5; Layout.fillWidth: true; elide: Text.ElideRight }
                     Label {
                         visible: !root.compact; Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 13; color: Theme.muted
@@ -354,30 +604,116 @@ ApplicationWindow {
                     }
                 }
             }
-            // DRIVER-001: without Interception nothing can be drawn; say so before setup starts.
+            // UPDATE-001: a new version, until it is installed or put aside with «Не сейчас».
             Rectangle {
+                id: updateBanner
+                objectName: "updateBanner"
+                readonly property var info: root.backend.updateInfo || ({})
+                visible: !!info.banner && root.page !== 9
+                Layout.fillWidth: true
+                implicitHeight: updateRow.implicitHeight + 20
+                radius: 12; color: Theme.accentSoft; border.color: Theme.accentBorder
+                GridLayout {
+                    id: updateRow
+                    anchors.fill: parent; anchors.margins: 10; columnSpacing: 10; rowSpacing: 8
+                    columns: root.narrow ? 1 : 2
+                    Label {
+                        Layout.fillWidth: true; Layout.preferredWidth: 1; wrapMode: Text.WordWrap; color: Theme.text
+                        text: updateBanner.info.state === "ready"
+                              ? qsTr("Версия %1 скачана — осталось перезапустить программу.").arg(updateBanner.info.latest)
+                              : qsTr("Вышла новая версия OlegPainter — %1.").arg(updateBanner.info.latest)
+                    }
+                    ButtonRow {
+                        Layout.fillWidth: root.narrow
+                        ActionButton { objectName: "updateBannerOpen"; text: qsTr("Подробнее"); primary: true; onClicked: root.page = 9 }
+                        ActionButton { objectName: "updateBannerLater"; text: qsTr("Не сейчас"); subtle: true; onClicked: root.backend.dismissUpdate() }
+                    }
+                }
+            }
+            // DRIVER-001/002: without a working Interception nothing can be drawn; say so before
+            // setup starts, and loudest when a damaged install threatens the next boot.
+            Rectangle {
+                id: driverBanner
                 objectName: "driverBanner"
-                visible: !root.backend.inputDriver.ready
+                readonly property var driver: root.backend.inputDriver
+                readonly property string driverState: driver.state || ""
+                readonly property bool urgent: driverState === "broken"
+                visible: !driver.ready
                 Layout.fillWidth: true
                 implicitHeight: driverRow.implicitHeight + 20
-                radius: 12; color: Theme.dangerSurface; border.color: Theme.danger
-                RowLayout {
+                radius: 12; color: Theme.dangerSurface; border.color: Theme.danger; border.width: urgent ? 2 : 1
+                // The text yields to the buttons (preferred width 1): sharing the row by natural
+                // widths cut the button captions on a ~1200 px window.
+                GridLayout {
                     id: driverRow
-                    anchors.fill: parent; anchors.margins: 10; spacing: 10
-                    Label {
-                        Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.text
-                        text: root.backend.inputDriver.state === "reboot"
-                              ? qsTr("Драйвер управления мышью установлен, но ещё не работает. Перезагрузите компьютер.")
-                              : qsTr("Не установлен драйвер управления мышью (Interception). Настраивать можно, но рисовать программа не сможет.")
+                    anchors.fill: parent; anchors.margins: 10; columnSpacing: 10; rowSpacing: 8
+                    columns: root.narrow ? 1 : 2
+                    ColumnLayout {
+                        Layout.fillWidth: true; Layout.preferredWidth: 1; spacing: 6
+                        Label {
+                            objectName: "driverBannerText"
+                            Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.text
+                            font.weight: driverBanner.urgent ? Font.DemiBold : Font.Normal
+                            text: driverBanner.driver.busy ? (driverBanner.driver.message || "") : ({
+                                "reboot": qsTr("Драйвер управления мышью установлен, но заработает только после перезагрузки компьютера."),
+                                "blocked": qsTr("Windows не запустила драйвер Interception после перезагрузки — рисовать программа не сможет. Подробности — на странице «Помощь»."),
+                                "unreachable": qsTr("Драйвер Interception запущен, но OlegPainter не может к нему подключиться. Перезапустите программу; если не поможет — перезагрузите компьютер."),
+                                "incomplete": qsTr("Драйвер Interception установлен не полностью — рисовать программа не сможет. Нажмите «Починить»."),
+                                "broken": qsTr("Внимание: драйвер Interception повреждён. Не перезагружайте компьютер — после перезагрузки могут перестать работать мышь и клавиатура. Сначала почините или удалите драйвер."),
+                                "no_mouse": qsTr("Драйвер Interception работает, но не видит ни одной мыши — рисовать не получится. Переподключите мышь; если не поможет — перезагрузите компьютер."),
+                                "unsupported": qsTr("На этом компьютере драйвер Interception не работает (нужен процессор x86 или x64) — рисовать программа не сможет.")
+                            })[driverBanner.driverState] || (driverBanner.driver.hvci
+                                ? qsTr("Не установлен драйвер управления мышью (Interception), а установить его сейчас нельзя: включена «Целостность памяти» Windows. Подробности — на странице «Помощь».")
+                                : qsTr("Не установлен драйвер управления мышью (Interception). Настраивать можно, но рисовать программа не сможет."))
+                        }
+                        ProgressBar {
+                            visible: !!driverBanner.driver.busy
+                            Layout.fillWidth: true; from: 0; to: 1; value: driverBanner.driver.progress || 0
+                            palette.dark: Theme.accent; palette.midlight: Theme.input
+                        }
                     }
-                    ActionButton {
-                        objectName: "installDriver"
-                        visible: root.backend.inputDriver.state !== "reboot"
-                        text: root.backend.inputDriver.can_install ? qsTr("Установить драйвер") : qsTr("Как установить")
-                        primary: true
-                        onClicked: { driverConsent.command = "install"; driverConsent.open() }
+                    ButtonRow {
+                        Layout.fillWidth: root.narrow
+                        enabled: !driverBanner.driver.busy
+                        ActionButton {
+                            objectName: "installDriver"
+                            visible: driverBanner.driverState === "missing" && !driverBanner.driver.hvci
+                            text: qsTr("Установить драйвер"); primary: true
+                            onClicked: { driverConsent.command = "install"; driverConsent.open() }
+                        }
+                        ActionButton {
+                            objectName: "repairDriver"
+                            visible: (driverBanner.driverState === "broken" || driverBanner.driverState === "incomplete") && !driverBanner.driver.hvci
+                            text: qsTr("Починить"); primary: true
+                            onClicked: { driverConsent.command = "repair"; driverConsent.open() }
+                        }
+                        ActionButton {
+                            objectName: "removeDriverBanner"
+                            visible: driverBanner.driverState === "broken"
+                            text: qsTr("Удалить драйвер"); danger: true
+                            onClicked: { driverConsent.command = "uninstall"; driverConsent.open() }
+                        }
+                        ActionButton {
+                            objectName: "restartForDriver"
+                            visible: ["reboot", "unreachable", "no_mouse"].indexOf(driverBanner.driverState) >= 0 && !driverBanner.driver.restart_scheduled
+                            text: qsTr("Перезагрузить"); primary: driverBanner.driverState === "reboot"
+                            onClicked: driverRestart.open()
+                        }
+                        ActionButton {
+                            objectName: "cancelRestartBanner"
+                            visible: !!driverBanner.driver.restart_scheduled
+                            text: qsTr("Отменить перезагрузку")
+                            onClicked: root.backend.driverAction("cancel_restart")
+                        }
+                        ActionButton {
+                            objectName: "driverDetails"
+                            visible: ["blocked", "unreachable", "no_mouse", "unsupported"].indexOf(driverBanner.driverState) >= 0
+                                     || (driverBanner.driverState === "missing" && !!driverBanner.driver.hvci)
+                            text: qsTr("Подробнее"); subtle: true
+                            onClicked: root.page = 9
+                        }
+                        ActionButton { objectName: "recheckDriver"; text: qsTr("Проверить снова"); subtle: true; onClicked: root.backend.driverAction("recheck") }
                     }
-                    ActionButton { objectName: "recheckDriver"; text: qsTr("Проверить снова"); subtle: true; onClicked: root.backend.driverAction("recheck") }
                 }
             }
             RowLayout {
@@ -400,8 +736,14 @@ ApplicationWindow {
                         onSettingsRequested: root.page = 1
                         onSearchRequested: imageSearchDialog.open()
                     }
-                    QuickStart { objectName: "quickStart"; visible: root.page === 7; Layout.fillWidth: true; backend: root.backend; narrow: root.narrow }
-                    BrushEditor { visible: root.page === 5; Layout.fillWidth: true; backend: root.backend }
+                    QuickStart {
+                        objectName: "quickStart"; visible: root.page === 7; Layout.fillWidth: true; backend: root.backend; narrow: root.narrow
+                        onLearnRequested: function(command) { learnConfirm.command = command; learnConfirm.open() }
+                    }
+                    BrushEditor {
+                        visible: root.page === 5; Layout.fillWidth: true; backend: root.backend
+                        onLearnRequested: function(command) { learnConfirm.command = command; learnConfirm.open() }
+                    }
                     SequencesEditor { objectName: "sequencesEditor"; visible: root.page === 6; Layout.fillWidth: true; backend: root.backend }
                     AiPage {
                         objectName: "aiPage"; visible: root.page === 8; Layout.fillWidth: true; backend: root.backend; narrow: root.narrow
@@ -410,8 +752,8 @@ ApplicationWindow {
                     HelpPage {
                         objectName: "helpPage"; visible: root.page === 9; Layout.fillWidth: true; backend: root.backend; narrow: root.narrow
                         onPageRequested: function(page) { root.page = page }
-                        onDriverInstallRequested: { driverConsent.command = "install"; driverConsent.open() }
-                        onDriverRemoveRequested: { driverConsent.command = "uninstall"; driverConsent.open() }
+                        onDriverConsentRequested: function(command) { driverConsent.command = command; driverConsent.open() }
+                        onDriverRestartRequested: driverRestart.open()
                     }
                     ColumnLayout {
                         visible: root.page === 1
@@ -431,16 +773,27 @@ ApplicationWindow {
                                 spacing: 12
                                 Label { text: qsTr("Программа и выбор цвета"); font.pixelSize: 15; font.weight: Font.DemiBold; Layout.fillWidth: true; wrapMode: Text.WordWrap }
                                 GridLayout {
+                                    id: placeGrid
+                                    // Three columns only when the choices fit: beside the preview panel
+                                    // «Другая программа» and the route were cut to «Другая прогр…».
+                                    readonly property int cols: root.narrow ? 1 : width < 720 ? 2 : 3
                                     Layout.fillWidth: true
-                                    columns: root.narrow ? 1 : 3
+                                    columns: cols
                                     columnSpacing: 12; rowSpacing: 6
-                                    // Wide: captions in row 0, boxes in row 1. Narrow: caption/box pairs stacked.
+                                    // Captions above their boxes: three in a row, two and one, or all stacked.
                                     Label { text: qsTr("Где рисуем"); color: Theme.muted; font.pixelSize: 12; Layout.row: 0; Layout.column: 0 }
-                                    Label { text: qsTr("Маршрут рисования"); color: Theme.muted; font.pixelSize: 12; Layout.row: root.narrow ? 2 : 0; Layout.column: root.narrow ? 0 : 1 }
-                                    Label { text: qsTr("Способ выбора цвета"); color: Theme.muted; font.pixelSize: 12; Layout.row: root.narrow ? 4 : 0; Layout.column: root.narrow ? 0 : 2 }
-                                    ChoiceBox { objectName: "placeSelector"; Layout.fillWidth: true; Layout.row: 1; Layout.column: 0; model: root.appState.places || []; textRole: "label"; valueRole: "id"; currentIndex: indexOfId(model, root.appState.current_place_id); enabled: root.appState.can_edit; onActivated: backend.selectProfile(currentValue, "") }
-                                    ChoiceBox { Layout.fillWidth: true; Layout.row: root.narrow ? 3 : 1; Layout.column: root.narrow ? 0 : 1; model: root.appState.algorithms || []; textRole: "label"; valueRole: "id"; currentIndex: indexOfId(model, root.appState.current_algo_code); enabled: root.appState.can_edit; onActivated: backend.selectProfile(root.appState.current_place_id, currentValue) }
-                                    ChoiceBox { Layout.fillWidth: true; Layout.row: root.narrow ? 5 : 1; Layout.column: root.narrow ? 0 : 2; objectName: "methodSelector"; model: root.backend.colorMethods; textRole: "label"; valueRole: "id"; currentIndex: indexOfId(model, cfg.color_picking_method); enabled: root.appState.can_edit; onActivated: backend.setChoice("color_picking_method", currentValue) }
+                                    Label { text: qsTr("Маршрут рисования"); color: Theme.muted; font.pixelSize: 12; Layout.row: placeGrid.cols === 1 ? 2 : 0; Layout.column: placeGrid.cols === 1 ? 0 : 1 }
+                                    Label { text: qsTr("Способ выбора цвета"); color: Theme.muted; font.pixelSize: 12; Layout.row: placeGrid.cols === 1 ? 4 : placeGrid.cols === 2 ? 2 : 0; Layout.column: placeGrid.cols === 3 ? 2 : 0 }
+                                    ChoiceBox { objectName: "placeSelector"; Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.row: 1; Layout.column: 0; model: root.appState.places || []; textRole: "label"; valueRole: "id"; currentIndex: indexOfId(model, root.appState.current_place_id); enabled: root.appState.can_edit; onActivated: backend.selectProfile(currentValue, "") }
+                                    ChoiceBox { Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.row: placeGrid.cols === 1 ? 3 : 1; Layout.column: placeGrid.cols === 1 ? 0 : 1; model: root.appState.algorithms || []; textRole: "label"; valueRole: "id"; currentIndex: indexOfId(model, root.appState.current_algo_code); enabled: root.appState.can_edit; onActivated: backend.selectProfile(root.appState.current_place_id, currentValue) }
+                                    ChoiceBox { Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.row: placeGrid.cols === 1 ? 5 : placeGrid.cols === 2 ? 3 : 1; Layout.column: placeGrid.cols === 3 ? 2 : 0; objectName: "methodSelector"; model: root.backend.colorMethods; textRole: "label"; valueRole: "id"; currentIndex: indexOfId(model, cfg.color_picking_method); enabled: root.appState.can_edit; onActivated: backend.setChoice("color_picking_method", currentValue) }
+                                }
+                                // Each place and route keeps its own snapshot (profiles.py): a switch
+                                // looked as if the calibrations were lost (audit 2026-10-05).
+                                Label {
+                                    objectName: "routeKeepsSettings"
+                                    Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font.pixelSize: 12
+                                    text: qsTr("У каждого места и маршрута свои паузы, калибровки и способ выбора цвета: при смене они переключаются, а при возврате — возвращаются.")
                                 }
                                 Label { text: qsTr("Калибровка на экране"); color: Theme.muted; font.pixelSize: 12; Layout.topMargin: 4 }
                                 // Only the calibration of the chosen method: another one would not be used.
@@ -526,7 +879,7 @@ ApplicationWindow {
                                         onClicked: if (backend.savePreset(presetName.text, profileParts.chosen)) presetName.clear()
                                     }
                                 }
-                                Label { text: qsTr("Что сохранить. Клавиши и картинку обычно не передают другим: у каждого свои."); color: Theme.muted; font.pixelSize: 12; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+                                Label { text: qsTr("Что сохранить. Клавиши и картинку обычно не передают другим: у каждого свои. Место на экране, выбор цвета, готовые цвета и слои — это точки вашего экрана: на другом компьютере их придётся указать заново."); color: Theme.muted; font.pixelSize: 12; Layout.fillWidth: true; wrapMode: Text.WordWrap }
                                 Flow {
                                     id: profileParts
                                     objectName: "profileParts"
@@ -568,18 +921,22 @@ ApplicationWindow {
                                         Layout.fillWidth: true; spacing: 0
                                         Rectangle { visible: index > 0; Layout.fillWidth: true; Layout.leftMargin: 10; Layout.rightMargin: 10; implicitHeight: 1; color: Theme.border }
                                         GridLayout {
-                                            columns: root.narrow ? 4 : 5
+                                            columns: root.narrow ? 1 : 2
                                             Layout.fillWidth: true; Layout.margins: 10
-                                            columnSpacing: 6
+                                            columnSpacing: 6; rowSpacing: 8
                                             ColumnLayout {
-                                                Layout.fillWidth: true; Layout.columnSpan: root.narrow ? 4 : 1; spacing: 2
+                                                Layout.fillWidth: true; spacing: 2
                                                 Label { text: modelData.name; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.weight: Font.Medium }
                                                 Label { visible: !!modelData.categories; text: qsTr("Изменит: ") + modelData.categories; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font.pixelSize: 11 }
                                             }
-                                            ActionButton { text: qsTr("Применить"); enabled: root.appState.can_edit; onClicked: backend.preset("apply", modelData.slug) }
-                                            ActionButton { text: qsTr("Перезаписать"); subtle: true; hint: qsTr("Сохранить в этот профиль текущие настройки"); enabled: root.appState.can_edit; onClicked: { overwritePreset.slug = modelData.slug; overwritePreset.name = modelData.name; overwritePreset.open() } }
-                                            ActionButton { text: qsTr("Экспорт"); subtle: true; onClicked: { exportProfileDialog.slug = modelData.slug; exportProfileDialog.open() } }
-                                            ActionButton { text: qsTr("Удалить"); subtle: true; danger: true; enabled: root.appState.can_edit; onClicked: { deletePreset.slug = modelData.slug; deletePreset.open() } }
+                                            // Four buttons do not fit a 360 px window in one row: they wrap.
+                                            ButtonRow {
+                                                Layout.fillWidth: root.narrow; spacing: 6
+                                                ActionButton { text: qsTr("Применить"); enabled: root.appState.can_edit; onClicked: { applyPreset.slug = modelData.slug; applyPreset.name = modelData.name; applyPreset.categories = modelData.categories || ""; applyPreset.open() } }
+                                                ActionButton { text: qsTr("Перезаписать"); subtle: true; hint: qsTr("Сохранить в этот профиль текущие настройки"); enabled: root.appState.can_edit; onClicked: { overwritePreset.slug = modelData.slug; overwritePreset.name = modelData.name; overwritePreset.open() } }
+                                                ActionButton { text: qsTr("Экспорт"); subtle: true; onClicked: { exportProfileDialog.slug = modelData.slug; exportProfileDialog.open() } }
+                                                ActionButton { text: qsTr("Удалить"); subtle: true; danger: true; enabled: root.appState.can_edit; onClicked: { deletePreset.slug = modelData.slug; deletePreset.name = modelData.name; deletePreset.open() } }
+                                            }
                                         }
                                     }
                                 }
@@ -591,6 +948,12 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         spacing: 12
                         Label { visible: !!backend.recordingCode; text: qsTr("Нажмите сочетание клавиш. Esc — отмена."); color: Theme.accentText; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                        // F-keys and chords with modifiers are swallowed while the program runs.
+                        Label {
+                            objectName: "hotkeysNote"
+                            Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font.pixelSize: 12
+                            text: qsTr("Глобальные клавиши работают в любой программе, пока OlegPainter открыт, и не доходят до неё: например, F5 не обновит страницу браузера. Если клавиша нужна игре, назначьте действию другую.")
+                        }
                         ActionButton { objectName: "resetAllHotkeys"; text: qsTr("Сбросить все"); subtle: true; enabled: !busy && !backend.recordingCode; onClicked: resetHotkeys.open() }
                         Card {
                             Layout.fillWidth: true
@@ -611,9 +974,10 @@ ApplicationWindow {
                                             columnSpacing: 6
                                             Label { text: modelData.label; Layout.fillWidth: true; Layout.columnSpan: root.narrow ? 3 : 1; wrapMode: Text.WordWrap }
                                             Label { visible: !root.narrow; text: modelData.scope === "global" ? qsTr("Глобально") : qsTr("В окне"); color: Theme.muted; font.pixelSize: 12; Layout.preferredWidth: 80 }
-                                            ActionButton { Layout.preferredWidth: 155; text: backend.recordingCode === modelData.code ? qsTr("Нажмите клавиши…") : modelData.sequence || qsTr("Отключено"); primary: backend.recordingCode === modelData.code; enabled: !busy && (backend.recordingCode === "" || backend.recordingCode === modelData.code); onClicked: backend.beginRecording(modelData.code) }
+                                            ActionButton { Layout.preferredWidth: root.narrow ? -1 : Math.max(155, implicitWidth); Layout.fillWidth: root.narrow; text: backend.recordingCode === modelData.code ? qsTr("Нажмите клавиши…") : modelData.sequence || qsTr("Отключено"); primary: backend.recordingCode === modelData.code; enabled: !busy && (backend.recordingCode === "" || backend.recordingCode === modelData.code); onClicked: backend.beginRecording(modelData.code) }
                                             ActionButton { text: qsTr("Сброс"); subtle: true; enabled: !busy && !backend.recordingCode; onClicked: backend.changeHotkey(modelData.code, "default") }
-                                            ActionButton { text: "×"; subtle: true; hint: qsTr("Отключить"); enabled: !busy && !backend.recordingCode; onClicked: backend.changeHotkey(modelData.code, "") }
+                                            // The stop key cannot be turned off: the window is minimised while drawing.
+                                            ActionButton { text: "×"; subtle: true; hint: qsTr("Отключить"); opacity: modelData.code === "stop" ? 0 : 1; enabled: !busy && !backend.recordingCode && modelData.code !== "stop"; onClicked: backend.changeHotkey(modelData.code, "") }
                                         }
                                     }
                                 }
@@ -716,6 +1080,12 @@ ApplicationWindow {
                         color: backend.messageError ? Theme.text : Theme.muted
                         ToolTip.visible: statusHover.hovered && truncated; ToolTip.text: text
                         HoverHandler { id: statusHover }
+                    }
+                    ActionButton {
+                        objectName: "closeWithoutSaving"; visible: !!root.appState.close_save_failed
+                        text: qsTr("Закрыть без сохранения"); danger: true
+                        hint: qsTr("Последние изменения настроек не сохранятся")
+                        onClicked: backend.closeWithoutSaving()
                     }
                     ActionButton {
                         objectName: "dismissMessage"; visible: backend.messageError

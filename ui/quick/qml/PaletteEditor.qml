@@ -26,9 +26,21 @@ ColumnLayout {
             anchors.fill: parent
             spacing: 12
             Label { text: qsTr("Образцы цветов  ·  ") + editor.paletteData.entries.length + " / " + editor.paletteData.maximum; font.pixelSize: 15; font.weight: Font.DemiBold; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+            // The samples are used by one colour method only: say so, as «Смешивание» does.
+            Label {
+                objectName: "paletteMethodNote"
+                visible: editor.backend.view.current_method_id !== "manual_palette"
+                Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.accentText
+                text: qsTr("Эти образцы использует только способ «Готовые цвета по одному». Сейчас выбран другой способ — образцы при рисовании не нужны.")
+            }
+            ActionButton {
+                visible: editor.backend.view.current_method_id !== "manual_palette"
+                text: qsTr("Выбрать способ «Готовые цвета по одному»"); subtle: true; enabled: editor.canEdit
+                onClicked: editor.backend.setChoice("color_picking_method", "manual_palette")
+            }
             Label {
                 Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted
-                text: editor.capturing ? qsTr("Нажимайте на цвета в целевой программе. Повторный клик по той же координате обновит образец. Завершите захват назначенной клавишей или кнопкой ниже.")
+                text: editor.capturing ? qsTr("Щёлкайте по цветам в программе рисования. Повторный щелчок по тому же месту обновит образец. Закончите кнопкой ниже или назначенной клавишей.")
                      : qsTr("Каждый образец связывает цвет с точкой на экране. Проверьте HEX после захвата: подсветка кнопок и эффекты курсора могут изменить измеренный цвет. Если известен точный HEX, укажите его вручную.")
             }
             Flow {
@@ -115,12 +127,16 @@ ColumnLayout {
     MixingEditor { backend: editor.backend; Layout.fillWidth: true }
     SurfaceDialog {
         id: clearPalette
+        objectName: "clearPaletteDialog"
         property int revision: -1
         parent: Overlay.overlay
         anchors.centerIn: parent
         title: qsTr("Очистить все образцы?")
         modal: true; standardButtons: Dialog.Yes | Dialog.No
         onAccepted: if (backend.editPalette("clear", -1, revision, "", "", "")) editor.selectedIndex = -1
-        Label { text: qsTr("Координаты и цвета этой палитры будут удалены.") }
+        ColumnLayout {
+            width: parent.width
+            Label { text: qsTr("Координаты и цвета этой палитры будут удалены."); Layout.fillWidth: true; wrapMode: Text.WordWrap }
+        }
     }
 }

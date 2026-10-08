@@ -142,6 +142,27 @@ def test_gpu_failure_falls_back_to_cpu_even_after_a_device_switch(tmp_path, monk
     assert str(path) in pool._gpu_failed
 
 
+def test_ai_runs_on_the_gpu_with_the_most_video_memory():
+    """Windows' «high performance» answer put a Ryzen's built-in 0.5 GB graphics
+    before a 16 GB RTX on the owner's desktop (2026-10-05): DirectML ran there."""
+    from engine.ai.runtime import Adapter, pick_gpu
+    rtx = Adapter(0, "NVIDIA GeForce RTX 4070 Ti SUPER", 0x10DE, 16061)
+    radeon = Adapter(1, "AMD Radeon(TM) Graphics", 0x1002, 485)
+    basic = Adapter(2, "Microsoft Basic Render Driver", 0x1414, 0, software=True)
+    assert pick_gpu([rtx, radeon, basic]).name == rtx.name and pick_gpu([rtx, radeon, basic]).device_id == 0
+    # The built-in graphics listed first (a laptop, or a monitor on the motherboard): the index still follows.
+    first = Adapter(0, "AMD Radeon(TM) Graphics", 0x1002, 485)
+    second = Adapter(1, "NVIDIA GeForce RTX 4070 Ti SUPER", 0x10DE, 16061)
+    gpu = pick_gpu([first, second, basic])
+    assert (gpu.name, gpu.device_id, gpu.memory_mb) == ("NVIDIA GeForce RTX 4070 Ti SUPER", 1, 16061)
+    # Equal memory: the adapter Windows lists first. Built-in graphics alone is still a GPU.
+    assert pick_gpu([Adapter(0, "A", 0x10DE, 8192), Adapter(1, "B", 0x1002, 8192)]).device_id == 0
+    assert pick_gpu([Adapter(0, "Intel(R) UHD Graphics", 0x8086, 0)]).name == "Intel(R) UHD Graphics"
+    # Only the software renderer or a remote display: no GPU at all.
+    assert pick_gpu([basic, Adapter(1, "Microsoft Remote Display Adapter", 0x1414, 0)]) is None
+    assert pick_gpu([]) is None
+
+
 def test_install_message_uses_the_viewer_language_and_gpu_error_is_readable(tmp_path):
     from dataclasses import replace
     from application.ai import _readable

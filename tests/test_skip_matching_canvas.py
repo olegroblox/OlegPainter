@@ -34,6 +34,14 @@ class SkipMatchingCanvasTests(unittest.TestCase):
         self.assertTrue(engine.drawn_mask[0].all())
         self.assertFalse(engine.drawn_mask[1].any())
 
+    def test_white_on_the_faint_pink_canvas_of_speed_draw_is_counted(self):
+        engine = _engine()
+        canvas = np.zeros((6, 6, 3), np.uint8)
+        canvas[:] = (253, 245, 245)
+        self.assertEqual(engine._mark_canvas_matching_cells(canvas), 3)
+        canvas[:] = (230, 230, 230)                 # a light grey is a colour of its own
+        self.assertEqual(_engine()._mark_canvas_matching_cells(canvas), 0)
+
     def test_cell_with_one_wrong_pixel_is_still_drawn(self):
         engine = _engine()
         canvas = np.full((6, 6, 3), 255, np.uint8)

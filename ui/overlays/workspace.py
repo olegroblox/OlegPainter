@@ -209,7 +209,7 @@ class DesktopWorkspace(QObject):
             svc = getattr(self, "service", None)
             if svc is not None:
                 try:
-                    svc.statusChanged.emit(tr("status_area_selected_select_image"))
+                    svc.statusChanged.emit(tr("status_open_image_first"))
                 except Exception:
                     log.debug("ignored exception emitting no-image status", exc_info=True)
             return
@@ -234,7 +234,7 @@ class DesktopWorkspace(QObject):
             svc = getattr(self, "service", None)
             if svc is not None:
                 try:
-                    svc.statusChanged.emit(tr("status_area_selected_select_image"))
+                    svc.statusChanged.emit(tr("status_open_image_first"))
                 except Exception:
                     log.debug("ignored exception emitting no-image status", exc_info=True)
             return
@@ -283,7 +283,7 @@ class DesktopWorkspace(QObject):
                 svc = getattr(self, "service", None)
                 if svc is not None:
                     try:
-                        svc.statusChanged.emit(tr("status_area_selected_select_image"))
+                        svc.statusChanged.emit(tr("status_open_image_first"))
                     except Exception:
                         log.debug("ignored exception emitting no-image status", exc_info=True)
                 return

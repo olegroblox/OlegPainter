@@ -23,6 +23,9 @@ Popup {
         ? "#" + values.reference_rgb.map(v => ("0" + v.toString(16)).slice(-2)).join("").toUpperCase() : ""
     readonly property var backgroundModels: (ai.models || []).filter(m => m.task === "background" && m.installed)
     readonly property bool aiReady: !!ai.enabled && !!tools.background
+    // A grey button shows no hint on hover: the missing models are named in a visible line.
+    readonly property var missingTools: !ai.enabled ? [] : [["segment", qsTr("выбор объекта")], ["inpaint", qsTr("стирание")],
+        ["upscale", qsTr("увеличение")], ["lineart", qsTr("контуры")], ["depth", qsTr("глубина")]].filter(p => !tools[p[0]]).map(p => p[1])
     readonly property var edits: backend.view.edits || ({})
     readonly property var filters: backend.view.filters || []
     property var adjust: ({brightness: 0, contrast: 0, saturation: 0, sharpness: 0})
@@ -33,8 +36,8 @@ Popup {
     }
     function resetAdjust() { adjust = {brightness: 0, contrast: 0, saturation: 0, sharpness: 0}; backend.previewAdjust({}) }
     Timer { id: adjustTimer; interval: 90; onTriggered: editor.backend.previewAdjust(editor.adjust) }
-    Shortcut { sequences: [StandardKey.Undo]; enabled: editor.opened && editor.canEdit && !!editor.edits.can_undo; onActivated: editor.backend.undoEdit() }
-    Shortcut { sequences: [StandardKey.Redo, "Ctrl+Y"]; enabled: editor.opened && editor.canEdit && !!editor.edits.can_redo; onActivated: editor.backend.redoEdit() }
+    Shortcut { sequences: [StandardKey.Undo]; enabled: editor.opened && editor.idle && !!editor.edits.can_undo; onActivated: editor.backend.undoEdit() }
+    Shortcut { sequences: [StandardKey.Redo, "Ctrl+Y"]; enabled: editor.opened && editor.idle && !!editor.edits.can_redo; onActivated: editor.backend.redoEdit() }
     signal pageRequested(int page)
     signal viewRequested(bool original)
     objectName: "backgroundEditor"
@@ -61,7 +64,7 @@ Popup {
         case "color": return values.mode === "alpha" ? qsTr("Прозрачные места картинки не рисуются.")
                                                     : qsTr("Цвета, похожие на фон, не рисуются.")
         }
-        return qsTr("Фон рисуется вместе с картинкой.")
+        return values.transparent ? qsTr("Прозрачные места картинки не рисуются.") : qsTr("Фон рисуется вместе с картинкой.")
     }
 
     contentItem: ColumnLayout {
@@ -70,22 +73,24 @@ Popup {
             Layout.fillWidth: true; spacing: 8
             Label { text: qsTr("Обработка картинки"); font.pixelSize: 18; font.weight: Font.DemiBold; Layout.fillWidth: true; elide: Text.ElideRight }
             BusyIndicator { running: editor.busy; visible: running; implicitWidth: 24; implicitHeight: 24 }
+            // Stops the network; «Отменить» beside it is the edit history.
             ActionButton {
-                visible: !!editor.ai.busy; text: qsTr("Отменить"); subtle: true
+                objectName: "abortAi"
+                visible: !!editor.ai.busy; text: editor.narrow ? "" : qsTr("Прервать"); iconName: "stop"; hint: qsTr("Прервать нейросеть"); subtle: true
                 onClicked: editor.backend.aiCommand("cancel")
             }
             ActionButton {
                 objectName: "undoEdit"
                 text: editor.narrow ? "" : qsTr("Отменить"); iconName: "undo"
                 hint: editor.edits.can_undo ? qsTr("Отменить: ") + editor.edits.undo_label + " (Ctrl+Z)" : qsTr("Отменять пока нечего")
-                enabled: editor.canEdit && !!editor.edits.can_undo
+                enabled: editor.idle && !!editor.edits.can_undo
                 onClicked: editor.backend.undoEdit()
             }
             ActionButton {
                 objectName: "redoEdit"
                 text: editor.narrow ? "" : qsTr("Повторить"); iconName: "redo"
                 hint: editor.edits.can_redo ? qsTr("Повторить: ") + editor.edits.redo_label + " (Ctrl+Y)" : qsTr("Повторять нечего")
-                enabled: editor.canEdit && !!editor.edits.can_redo
+                enabled: editor.idle && !!editor.edits.can_redo
                 onClicked: editor.backend.redoEdit()
             }
             ActionButton {
@@ -96,7 +101,15 @@ Popup {
                 enabled: editor.idle
                 onClicked: editor.backend.restoreOriginal()
             }
-            ActionButton { objectName: "closeBackground"; text: qsTr("Готово"); onClicked: editor.close() }
+            // «Готово» keeps what the colour sliders show: closing used to drop it silently.
+            ActionButton {
+                objectName: "closeBackground"; text: qsTr("Готово")
+                onClicked: {
+                    if (editor.adjusting && editor.idle && editor.backend.applyAdjust(editor.adjust))
+                        editor.adjust = {brightness: 0, contrast: 0, saturation: 0, sharpness: 0}
+                    editor.close()
+                }
+            }
         }
         ScrollView {
             id: bodyScroll; objectName: "processingScroll"
@@ -130,6 +143,7 @@ Popup {
                                     : editor.adjusting && editor.backend.adjustUrl ? editor.backend.adjustUrl
                                     : editor.backend.sourceUrl
                             pickEnabled: editor.canEdit && editor.backend.view.image_loaded
+                            pickCursor: editor.picking || editor.selecting ? Qt.CrossCursor : Qt.PointingHandCursor
                             onPicked: function(x, y) {
                                 if (editor.picking) {
                                     if (editor.backend.pickBackground(x, y, editor.backend.sourceUrl)) {
@@ -410,14 +424,14 @@ Popup {
                 }
                 RowLayout {
                     visible: editor.adjusting
-                    spacing: 8
+                    Layout.fillWidth: true; spacing: 8
                     ActionButton {
                         objectName: "applyAdjust"; primary: true
                         text: qsTr("Применить"); enabled: editor.idle
                         onClicked: if (editor.backend.applyAdjust(editor.adjust)) editor.adjust = {brightness: 0, contrast: 0, saturation: 0, sharpness: 0}
                     }
                     ActionButton { objectName: "resetAdjust"; text: qsTr("Сбросить"); onClicked: editor.resetAdjust() }
-                    Label { text: qsTr("Слева — как будет. «Применить» можно отменить."); color: Theme.muted; font.pixelSize: 12 }
+                    Label { text: qsTr("На картинке — как будет. «Готово» тоже применит, «Отменить» вернёт."); color: Theme.muted; font.pixelSize: 12; Layout.fillWidth: true; wrapMode: Text.WordWrap }
                 }
                 Label { text: qsTr("Фильтры"); color: Theme.muted; font.pixelSize: 12; Layout.topMargin: 4 }
                 Flow {
@@ -478,8 +492,16 @@ Popup {
                     enabled: editor.canEdit && !!editor.tools.depth
                     checked: !!editor.ai.depth_order
                     onToggled: editor.backend.aiSet("depth_order", checked)
-                    ToolTip.visible: hovered && !editor.tools.depth
-                    ToolTip.text: qsTr("Установите модель глубины на странице «AI»")
+                }
+                RowLayout {
+                    objectName: "aiModelsMissing"
+                    visible: editor.missingTools.length > 0
+                    Layout.fillWidth: true; spacing: 8
+                    Label {
+                        Layout.fillWidth: true; Layout.preferredWidth: 1; wrapMode: Text.WordWrap; color: Theme.muted; font.pixelSize: 12
+                        text: qsTr("Серые кнопки ждут моделей: ") + editor.missingTools.join(", ") + qsTr(". Их можно установить на странице «AI».")
+                    }
+                    ActionButton { text: qsTr("Открыть AI"); iconName: "sparkles"; subtle: true; onClicked: { editor.close(); editor.pageRequested(8) } }
                 }
                 Label {
                     visible: !!editor.ai.message

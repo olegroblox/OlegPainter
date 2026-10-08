@@ -25,7 +25,7 @@ Card {
             id: surface
             objectName: "settingsPreviewImage"
             Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: 160
-            source: panel.showOriginal ? (panel.backend.originalUrl || panel.backend.sourceUrl) : panel.backend.previewUrl
+            source: panel.showOriginal ? panel.backend.sourceUrl : panel.backend.previewUrl
             pickEnabled: surface.source.toString() !== ""
             onPicked: panel.viewRequested(panel.showOriginal)
             Label {

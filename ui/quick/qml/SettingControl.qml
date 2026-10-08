@@ -45,8 +45,9 @@ ColumnLayout {
         Layout.fillWidth: true
     }
     Label {
-        visible: control.descriptor.key === "color_merge_threshold" && Number(control.currentValue) > 0.1
-        text: qsTr("Сильное объединение может оставить один цвет. Для мягкого эффекта попробуйте 1–5, для отключения — 0.")
+        // The same numbers as the hint: the effect starts about 15–20, 50 is already strong.
+        visible: control.descriptor.key === "color_merge_threshold" && Number(control.currentValue) > 0.5
+        text: qsTr("Сильное объединение может оставить один-два цвета. Для мягкого эффекта попробуйте 15–30, для отключения — 0.")
         color: Theme.accentText; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12
     }
     Loader {
@@ -107,6 +108,18 @@ ColumnLayout {
                     control.backend.setDisplayedSetting(control.descriptor.key, cleaned === "" ? NaN : Number(cleaned))
                     text = Qt.binding(function() { return String(slider.draftValue) })
                 }
+            }
+            // The same «Авто» as at «Цветов» on the drawing page: one switch, both places.
+            ActionButton {
+                objectName: "settingsAutoColors"
+                visible: control.descriptor.key === "k_clusters"
+                text: qsTr("Авто")
+                selected: !!control.backend.view.auto_colors
+                enabled: !!control.backend.view.can_edit
+                hint: control.backend.view.auto_colors
+                      ? qsTr("Включено: режим и число цветов подбираются по каждой новой картинке, после удаления фона. Нажмите, чтобы задавать число самому")
+                      : qsTr("Подбирать цветной или чёрно-белый режим и число цветов по картинке — сейчас и для каждой новой")
+                onClicked: control.backend.setAutoColors(!control.backend.view.auto_colors)
             }
         }
     }

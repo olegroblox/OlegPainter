@@ -44,7 +44,10 @@ def measure_stamp(before_img: Image.Image, after_img: Image.Image, *, anchor=Non
     cx, cy = float(np.median(xs)), float(np.median(ys))
     distances = np.hypot(xs - cx, ys - cy)
     r95 = float(np.percentile(distances, 95))
-    if math.hypot(cx - ax, cy - ay) > max(2.0, r95 * .15):
+    # A repaint elsewhere lies tens of pixels away; a game stamping where it sampled
+    # the cursor lands 2-3 px off (live Spray Paint! 2026-10-07: 2.8 px at radius 7
+    # failed the old 2 px limit and with it the whole brush learning).
+    if math.hypot(cx - ax, cy - ay) > max(3.0, r95 * .4):
         log.info("Stamp not measured: the mark is %.1f px from the press (radius %.1f px)",
                  math.hypot(cx - ax, cy - ay), r95)
         return None  # a repaint elsewhere is not a stamp at the click position

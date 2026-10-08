@@ -166,6 +166,7 @@ SESSION_PROFILE_KEYS = {
     "pen_max_step",
     "pen_split_strokes",
     "pen_stroke_gap",
+    "input_timing_measured",
     "hex_input_coord",
     "hex_field_opened_by_actions",
     "manual_palette_coords",
@@ -231,6 +232,7 @@ class PainterService(QObject, AiToolsMixin, AiServiceMixin, ConfigServiceMixin, 
     kalkaSelectAreaRequested = Signal()    # select area (F1) -> UI starts Kalka rubber-band placement
     screenCalibrationRequested = Signal(str)
     brushCalibrationRequested = Signal(object)
+    brushCaptureApplied = Signal(str)  # a picked brush control or test spot was saved
     captureStateChanged = Signal(object)   # layer/palette/extra-actions capture mode for the HUD
     desktopInteractionChanged = Signal(str)
 
@@ -2645,6 +2647,20 @@ class PainterService(QObject, AiToolsMixin, AiServiceMixin, ConfigServiceMixin, 
             missing.append("• Настройте ползунок непрозрачности для смешивания цветов (страница «Палитра»).")
             missing_action_codes.append("calibrate_alpha_slider")
 
+        if (active_method == "hex_field" and bool(getattr(self.engine, "hex_field_opened_by_actions", False))
+                and not getattr(self.engine, "is_capturing_extra_actions", False)):
+            # Gartic Phone: the colour box opens only after recorded clicks, and a picker
+            # left open over the canvas spoils the first stroke. The quick start asked for
+            # both while «Начать» was already allowed (audit 2026-10-05).
+            if not self.engine._should_play_actions("pre"):
+                required_calibrations.append("hex_actions")
+                missing.append("• Запишите щелчки, которые открывают окно цвета (кнопка «Записать открытие»).")
+                missing_action_codes.append("record_open_actions")
+            if not self.engine._should_play_actions("post"):
+                required_calibrations.append("hex_actions")
+                missing.append("• Запишите щелчок, который закрывает окно цвета (кнопка «Записать закрытие»).")
+                missing_action_codes.append("record_close_actions")
+
         if self._compute_capture_state()["active"] or self.desktop_interaction or self._hotkey_capture_active:
             missing.append(tr("prep_missing_finish_capture"))
             missing_action_codes.append("finish_capture")
@@ -2655,6 +2671,11 @@ class PainterService(QObject, AiToolsMixin, AiServiceMixin, ConfigServiceMixin, 
         if self.brush_learning_active:
             missing.append("• Дождитесь завершения обучения кисти.")
             missing_action_codes.append("wait_brush_learning")
+        elif self._dynamic_brush_should_prompt_learning():
+            # «Готово к рисованию» used to be shown, and «Начать» then minimised the
+            # window only to send the user to the brush page (audit 2026-10-05).
+            missing.append("• Автоматическая кисть включена, но не обучена: обучите её на странице «Кисть» или выключите там.")
+            missing_action_codes.append("train_brush")
 
         return {
             "image_loaded": bool(image_loaded),

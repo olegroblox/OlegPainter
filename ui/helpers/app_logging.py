@@ -82,7 +82,8 @@ def configure_logging(level: int | None = None) -> logging.Logger:
         datefmt="%H:%M:%S",
     )
 
-    if not any(isinstance(h, logging.StreamHandler) for h in root.handlers):
+    # The windowed EXE has no console: sys.stderr is None there.
+    if sys.stderr is not None and not any(isinstance(h, logging.StreamHandler) for h in root.handlers):
         stream = logging.StreamHandler(sys.stderr)
         stream.setFormatter(fmt)
         root.addHandler(stream)

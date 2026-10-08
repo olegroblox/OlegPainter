@@ -181,3 +181,43 @@ def test_a_lost_last_move_is_learned_as_the_nudge(monkeypatch):
     assert input_timing._last_move_needs_step(paint, probe, 2.5) is False
     stamps, probe = target(lambda nudge: False)                    # never connects: the jump probe decides
     assert input_timing._last_move_needs_step(stamps, probe, 2.5) is False
+
+
+def test_stamping_rows_overlap_and_the_pace_must_fill_a_square_solid(monkeypatch):
+    # Live Spray Paint! 2026-10-07: the 0.1 stamp (radius 2.2, 5 x 4 px) striped on
+    # 4 px rows; a straight-line check passed 1 ms while fills read 94-98 %.
+    from types import SimpleNamespace
+    from engine.olegpainter import input_timing
+    assert input_timing.stamp_row_pitch(2.2) == 2
+    assert input_timing.stamp_row_pitch(3.3) == 3
+    assert input_timing.stamp_row_pitch(0.4) == 1
+    engine = SimpleNamespace(_automation_cancelled=lambda: False)
+    drawn = []
+    monkeypatch.setattr(input_timing, "_fill_square_with_route",
+                        lambda eng, x0, y0, side, cell, dwell, step: drawn.append((side, cell, dwell)))
+
+    def probe(draw):
+        draw(60, 60)
+        side, _cell, dwell = drawn[-1]
+        mask = np.zeros((120, 120), bool)
+        mask[60 - side // 2:60 + side // 2, 60 - side // 2:60 + side // 2] = True
+        if dwell < 0.002:                       # too fast: a hole between stamps
+            mask[50:53, 50:56] = False
+        return mask, (0, 0)
+
+    choice = {"draw_delay": 0.001, "pen_max_step": 2}
+    input_timing._check_fill_speed(engine, probe, choice, 2, 3.7, None)
+    assert choice["draw_delay"] == 0.0023 and choice["fill_cell"] == 2
+    assert [c["ok"] for c in choice["fill_checks"]] == [False, False, True, True]
+    assert all(cell == 2 and side == 40 for side, cell, _d in drawn)
+
+
+def test_recommended_cell_overlaps_stamps_only_where_the_program_does_not_connect():
+    from engine.olegpainter.core import OlegPainter
+    engine = OlegPainter(status_callback=lambda _m: None)
+    engine._dynamic_brush_v2_radius_table = lambda: [(2.2, 0.1), (11.4, 0.6)]
+    engine.brush_size = 4
+    engine.target_connects_points = False
+    assert engine.dynamic_brush_recommended_cell() == 2
+    engine.target_connects_points = True
+    assert engine.dynamic_brush_recommended_cell() is None       # Paint: the exact diameter, 4

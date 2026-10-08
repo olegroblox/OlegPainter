@@ -25,7 +25,7 @@ Card {
                 delegate: ChoiceTile {
                     required property var modelData
                     objectName: "qualityPreset_" + modelData.id
-                    Layout.fillWidth: true; Layout.preferredWidth: 1
+                    Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.fillHeight: true
                     title: modelData.label
                     detail: modelData.detail
                     selected: editor.backend.view.quality_preset === modelData.id
@@ -36,7 +36,7 @@ Card {
         }
         Label {
             visible: editor.backend.view.quality_preset === "custom"
-            text: qsTr("Сейчас выбраны свои настройки. Нажмите пресет, чтобы вернуться к проверенному набору.")
+            text: qsTr("Сейчас выбраны свои настройки. Выберите «Быстро», «Баланс» или «Точно», чтобы вернуться к проверенному набору.")
             Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font.pixelSize: 12
         }
         Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.border }
@@ -54,8 +54,8 @@ Card {
             }
         }
         Label {
-            text: editor.advanced ? qsTr("Подсказки к параметрам — при наведении или по кнопке «?».")
-                                  : qsTr("Здесь то, что меняют чаще всего. Остальное — в «Расширенных»: подготовка картинки, маршрут, совместимость с программой и проверка результата.")
+            text: editor.advanced ? qsTr("Подсказка к параметру — по значку ⓘ рядом с ним.")
+                                  : qsTr("Здесь то, что меняют чаще всего. Остальное — в «Расширенных»: подготовка картинки, маршрут, совместимость с программой и диагностика.")
             Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font.pixelSize: 12
         }
         Label {

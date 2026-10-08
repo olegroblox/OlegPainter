@@ -5,11 +5,13 @@ AppMenuItem 1.0 AppMenuItem.qml
 AiPage 1.0 AiPage.qml
 BackgroundEditor 1.0 BackgroundEditor.qml
 BrushEditor 1.0 BrushEditor.qml
+ButtonRow 1.0 ButtonRow.qml
 CalibrationDialog 1.0 CalibrationDialog.qml
 Card 1.0 Card.qml
 ChoiceBox 1.0 ChoiceBox.qml
 CaptionButton 1.0 CaptionButton.qml
 ChoiceTile 1.0 ChoiceTile.qml
+ConsentCheck 1.0 ConsentCheck.qml
 DrawingSetup 1.0 DrawingSetup.qml
 DrawingWorkspace 1.0 DrawingWorkspace.qml
 Glyph 1.0 Glyph.qml

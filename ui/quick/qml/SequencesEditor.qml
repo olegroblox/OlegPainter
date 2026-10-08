@@ -44,8 +44,10 @@ ColumnLayout {
             Label {
                 Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted
                 text: editor.selected === 0
-                    ? qsTr("Запишите кнопки слоёв в целевой программе в нужном порядке. Рисунок будет распределяться между этими слоями.")
-                    : qsTr("Запишите нажатия мыши в целевой программе. Они будут повторяться ") + (editor.selected === 1 ? qsTr("до") : qsTr("после")) + qsTr(" каждого выбора цвета.")
+                    ? qsTr("Для программ со слоями: запишите щелчки по слоям в нужном порядке. Цвета рисунка поделятся между слоями поровну — первые цвета в первый слой, следующие во второй и так далее.")
+                    : editor.selected === 1
+                      ? qsTr("Запишите щелчки, которые нужны перед каждой сменой цвета: например, открыть окно цвета перед вводом кода. Программа повторит их каждый раз.")
+                      : qsTr("Запишите щелчки, которые нужны после каждой смены цвета: например, закрыть окно цвета, чтобы оно не мешало рисовать. Программа повторит их каждый раз.")
             }
             ToggleSwitch {
                 objectName: "sequenceEnabled"
@@ -91,11 +93,11 @@ ColumnLayout {
                 color: editor.capturing ? Theme.accent : Theme.muted
                 text: editor.capturing
                     ? qsTr("Новая запись: ") + editor.group.entries.length + qsTr(" из ") + editor.group.maximum + qsTr(". Прежняя запись сохранится при отмене. Завершите запись кнопкой или назначенной клавишей. Отмена — кнопкой") + (editor.stopBinding ? qsTr(" или ") + editor.stopBinding : "") + "."
-                    : qsTr("Сохранено: ") + (editor.group.saved_count || 0) + qsTr(". Новая запись заменит её только после завершения.")
+                    : qsTr("Сохранено щелчков: ") + (editor.group.saved_count || 0) + qsTr(". Новая запись заменит сохранённую, только когда вы её закончите.")
             }
             Label {
                 visible: editor.group.entries.length === 0
-                text: editor.capturing ? qsTr("Ожидаю нажатия в целевой программе…") : qsTr("Записи пока нет.")
+                text: editor.capturing ? qsTr("Жду щелчков в программе рисования…") : qsTr("Записи пока нет.")
                 color: Theme.muted
             }
             ListView {
@@ -112,9 +114,9 @@ ColumnLayout {
                     color: modelData.index % 2 ? Theme.input : "transparent"
                     RowLayout {
                         anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12
-                        Label { text: modelData.index + ". " + modelData.label; Layout.fillWidth: true }
+                        Label { text: modelData.index + ". " + modelData.label; Layout.fillWidth: true; elide: Text.ElideRight }
                         Label { text: modelData.x + ", " + modelData.y; color: Theme.muted }
-                        Label { visible: editor.selected !== 0; text: Number(modelData.delay).toFixed(2) + qsTr(" с"); color: Theme.muted }
+                        Label { visible: editor.selected !== 0; text: Number(modelData.delay).toLocaleString(Qt.locale(), "f", 2) + qsTr(" с"); color: Theme.muted }
                     }
                 }
             }
@@ -131,6 +133,9 @@ ColumnLayout {
         title: qsTr("Удалить сохранённую запись?")
         standardButtons: Dialog.Yes | Dialog.No
         onAccepted: editor.backend.sequenceCommand(sequenceId, "clear", revision)
-        Label { text: qsTr("Её использование будет выключено.") }
+        ColumnLayout {
+            width: parent.width
+            Label { text: qsTr("Записанные щелчки удалятся, и программа перестанет их повторять."); Layout.fillWidth: true; wrapMode: Text.WordWrap }
+        }
     }
 }

@@ -6,6 +6,31 @@ from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, co
 from PyInstaller.utils.hooks import collect_all
 from PyInstaller.building.build_main import Analysis, PYZ, EXE, COLLECT
 from PyInstaller.building.datastruct import Tree
+from PyInstaller.utils.win32.versioninfo import (
+    VSVersionInfo, FixedFileInfo, StringFileInfo, StringTable, StringStruct, VarFileInfo, VarStruct,
+)
+import re
+
+# File properties of OlegPainter.exe («Подробно» in Explorer): the same version as
+# the window title, read from the one place it is defined.
+APP_VERSION = re.search(r'APP_VERSION = "([^"]+)"', open("application/support.py", encoding="utf-8").read()).group(1)
+_numbers = tuple((list(map(int, APP_VERSION.split("."))) + [0, 0, 0, 0])[:4])
+version_info = VSVersionInfo(
+    ffi=FixedFileInfo(filevers=_numbers, prodvers=_numbers),
+    kids=[
+        StringFileInfo([StringTable("040904B0", [
+            StringStruct("CompanyName", "OlegPainter"),
+            StringStruct("FileDescription", "OlegPainter"),
+            StringStruct("FileVersion", APP_VERSION),
+            StringStruct("InternalName", "OlegPainter"),
+            StringStruct("LegalCopyright", "GNU GPL v3.0"),
+            StringStruct("OriginalFilename", "OlegPainter.exe"),
+            StringStruct("ProductName", "OlegPainter"),
+            StringStruct("ProductVersion", APP_VERSION),
+        ])]),
+        VarFileInfo([VarStruct("Translation", [1033, 1200])]),
+    ],
+)
 
 datas = []
 binaries = []
@@ -18,6 +43,9 @@ for pkg in ("PIL", "numpy", "sklearn", "keyboard", "pynput", "windows_capture"):
     hiddenimports += collected[2]
 
 hiddenimports += collect_submodules("cv2")
+# SciPy 1.18 imports its bundled array-API layer by name at run time (scikit-learn
+# pulls it in); the PyInstaller hook misses it and the EXE fails on start.
+hiddenimports += collect_submodules("scipy._external")
 hiddenimports += ["PySide6.QtSvg", "PySide6.QtOpenGLWidgets"]  # явно подтянуть нужные модули
 # interception-python imports win32api/win32con at module load but declares no
 # deps, so make sure pywin32 submodules ship even though nothing imports them
@@ -99,6 +127,26 @@ a = Analysis(
         "PySide6.QtWebSockets",
     ],
 )
+# The PySide6 hooks ship every QML module of Qt with the DLLs it loads. The window
+# uses only QtQuick (Controls, Layouts, Dialogs): leave out the browser engine
+# (190 MB, left from the removed web shell), 3D, PDF and the like, and OpenCV's video
+# codec (the app reads no video). About 260 MB less; `--self-test` checks the result.
+_UNUSED_QT = ("webengine", "webview", "webchannel", "websockets", "quick3d", "qt63d", "qt3d",
+              "qt6pdf", "qtpdf", "/pdf/", "texttospeech", "sensors", "scxml", "remoteobjects",
+              "positioning", "location", "multimedia", "spatialaudio", "charts", "datavisualization",
+              "graphs", "virtualkeyboard", "qttest", "qt6test", "quicktest")
+
+
+def _needed(entry):
+    name = entry[0].replace("\\", "/").lower()
+    if name.startswith("pyside6/"):
+        return not any(part in name for part in _UNUSED_QT)
+    return "opencv_videoio_ffmpeg" not in name
+
+
+a.binaries = [entry for entry in a.binaries if _needed(entry)]
+a.datas = [entry for entry in a.datas if _needed(entry)]
+
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
@@ -114,8 +162,11 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    console=True,
+    # Windowed: a console window next to the app confuses users. Startup errors are
+    # shown in a message box and written to logs/ (STARTUP-001).
+    console=False,
     icon="ui/OlegPainter Pro v1.3.ico",
+    version=version_info,
 )
 coll = COLLECT(
     exe,

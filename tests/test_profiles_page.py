@@ -51,20 +51,29 @@ def test_profiles_folder_opens_in_explorer(quick, monkeypatch):
 
 
 def test_flip_mirrors_the_picture_itself(quick, tmp_path):
+    """An undoable edit: inserting the mirror as a new picture lost «Отменить»,
+    the inserted original and a removed background (2026-10-05)."""
     from PIL import Image
+    from tests.test_quick_presentation import pump
     source = tmp_path / "arrow.png"
     image = Image.new("RGB", (4, 2), "white")
     image.putpixel((0, 0), (255, 0, 0))
     image.save(source)
-    presenter = quick.presenter
+    presenter, service = quick.presenter, quick.service
     assert not presenter.flipImage("horizontal")          # nothing to flip yet
     assert presenter.openSource(QUrl.fromLocalFile(str(source)))
+    pump(lambda: not service.edit_busy)       # an automatic background left by another test
     assert presenter.flipImage("horizontal")
-    flipped = quick.service.engine.source_pil_image
+    pump(lambda: not service.edit_busy)
+    flipped = service.engine.source_pil_image
     assert flipped.getpixel((3, 0))[:3] == (255, 0, 0) and flipped.getpixel((0, 0))[:3] == (255, 255, 255)
     assert presenter.flipImage("vertical")
-    assert quick.service.engine.source_pil_image.getpixel((3, 1))[:3] == (255, 0, 0)
+    pump(lambda: not service.edit_busy)
+    assert service.engine.source_pil_image.getpixel((3, 1))[:3] == (255, 0, 0)
     assert not presenter.flipImage("sideways")
+    assert service.edit_history()["can_undo"] and service.has_picture_edits
+    assert service.undo_edit()
+    assert service.engine.source_pil_image.getpixel((3, 0))[:3] == (255, 0, 0)
 
 
 def test_mix_canvas_colour_can_be_picked_from_screen(quick, monkeypatch):
@@ -101,3 +110,36 @@ def test_whats_new_is_shown_once_to_people_who_used_the_window(tmp_path):
         first.dispose(save=False)
         first.deleteLater()
 
+
+
+def test_newcomer_who_left_the_quick_start_gets_no_whats_new(tmp_path):
+    """«Что нового» compares with 1.3: at a newcomer's second launch it meant nothing
+    (audit 2026-10-05). Whoever started with the quick start has this version."""
+    from PySide6.QtCore import QSettings
+    from PySide6.QtQuickControls2 import QQuickStyle
+    from PySide6.QtWidgets import QApplication
+    from tests.test_quick_presentation import _open_quick
+    from application.support import APP_VERSION
+    QApplication.instance() or QApplication([])
+    QQuickStyle.setStyle("Basic")
+    QSettings().setValue("quick/whatsNewSeen", "")
+    first = _open_quick(tmp_path, first_run=True)
+    try:
+        assert not first.presenter.whatsNewDue
+        first.presenter.setQuickStartSeen(True)
+        assert QSettings().value("quick/whatsNewSeen") == APP_VERSION
+    finally:
+        first.dispose(save=False)
+        first.deleteLater()
+        QSettings().setValue("quick/whatsNewSeen", APP_VERSION)
+
+
+def test_profiles_explain_themselves_in_plain_words(quick, tmp_path):
+    """A broken file said «Expecting value: line 1 column 1 (char 0)» (audit 2026-10-05)."""
+    junk = tmp_path / "not-a-profile.json"
+    junk.write_text("hello", encoding="utf-8")
+    assert not quick.presenter.importPreset(QUrl.fromLocalFile(str(junk)))
+    assert "не похож на профиль" in quick.presenter.message
+    assert quick.presenter.savePreset("Мой профиль", ["drawing", "calibration"])
+    listed = next(p for p in quick.presenter.view["presets"] if p["name"] == "Мой профиль")
+    assert "Выбор цвета и кисть" in listed["categories"]

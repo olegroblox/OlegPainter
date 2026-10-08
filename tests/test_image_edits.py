@@ -239,7 +239,7 @@ def test_new_pictures_get_their_colour_count_after_the_background(service):
 
     service.set_auto_background("off")
     assert service.set_screen_snapshot(three_colours())
-    assert messages[-1] == ("Снимок экрана вставлен. Обрежьте лишнее или уберите фон, если нужно. "
+    assert messages[-1] == ("Снимок экрана вставлен. Фон можно убрать в «Обработке», а края обрезать в трафарете (Alt+F2). "
                             "Цветов подобрано автоматически: 4.")
 
     service.set_auto_colors(False)                        # off: the user's number stays

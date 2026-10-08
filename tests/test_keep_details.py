@@ -35,6 +35,15 @@ def test_merge_small_keeps_the_pupil_and_merges_the_noise(engine):
     assert (engine.cluster_map == 2).sum() == 0
 
 
+def test_a_dark_speck_on_the_edge_of_a_cut_out_picture_is_not_a_detail(engine):
+    """Live «Нарисуй меня!» 2026-10-07: black dots along the arms of a cut-out player."""
+    engine.cluster_map[:, 10:] = -1                   # the removed background
+    engine.cluster_map[5, 9] = 1                      # a dark speck on the silhouette
+    engine._merge_small_components_into_neighbors(centres(), -1)
+    assert int(engine.cluster_map[5, 9]) == 0
+    assert (engine.cluster_map[3:5, 3] == 1).all()    # the pupil inside stays
+
+
 def test_without_the_option_everything_small_merges(engine):
     engine.prep_keep_details = False
     engine._merge_small_components_into_neighbors(centres(), -1)
@@ -50,6 +59,40 @@ def test_despeckle_puts_the_pupil_back(engine):
     engine.prep_keep_details = False
     engine._apply_aggressive_despeckle(-1)
     assert (engine.cluster_map == 1).sum() == 0
+
+
+ORANGE, DARK_ORANGE = (251, 149, 47), (199, 98, 21)
+
+
+def _outlined_fur():
+    """Orange fur, a black outline and 2-cell dark orange specks: one in the open
+    fur (a stripe end, a detail) and one between the fur and the outline (the
+    anti-aliasing fringe that drew a cartoon cat as 1406 dots, 2026-10-06)."""
+    from engine.olegpainter.core import OlegPainter
+    eng = OlegPainter(status_callback=lambda _m: None)
+    eng.fast_min_region_area = 4
+    cluster_map = np.zeros((12, 12), int)          # orange fur
+    cluster_map[:, 9:] = 2                          # black outline
+    cluster_map[3:5, 3] = 1                         # a stripe end in the fur
+    cluster_map[7:9, 8] = 1                         # fringe: touches fur and outline
+    eng.cluster_map = cluster_map
+    eng.color_palette = [("#FB952F", 0, 100, ORANGE), ("#C76215", 1, 4, DARK_ORANGE), ("#0F0F14", 2, 36, BLACK)]
+    return eng, {0: ORANGE, 1: DARK_ORANGE, 2: BLACK}
+
+
+def test_a_fringe_between_two_colours_is_not_a_detail():
+    eng, colours = _outlined_fur()
+    eng._merge_small_components_into_neighbors(colours, -1)
+    assert (eng.cluster_map[3:5, 3] == 1).all()          # stands out against the fur alone
+    assert not (eng.cluster_map[7:9, 8] == 1).any()      # lies between fur and outline
+
+
+def test_despeckle_keeps_the_detail_and_drops_the_fringe():
+    eng, _colours = _outlined_fur()
+    eng.aggressive_despeckle_enabled = True
+    eng._apply_aggressive_despeckle(-1)
+    assert (eng.cluster_map[3:5, 3] == 1).all()
+    assert not (eng.cluster_map[7:9, 8] == 1).any()
 
 
 def test_the_option_is_saved_with_the_settings():

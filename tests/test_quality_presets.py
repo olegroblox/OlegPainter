@@ -10,8 +10,11 @@ from tests.test_application_controller import controllers  # noqa: F401
 from tests.test_quick_presentation import quick, pump, visual_item  # noqa: F401
 
 
-def test_fresh_settings_are_the_balanced_preset(controllers):
+def test_first_launch_starts_with_the_balanced_preset(controllers):
+    # PRESET-BASE-001: with no saved session the start place takes the recommended
+    # settings, and their picture preparation is «Баланс».
     controller = controllers()
+    assert controller.restore() is False
     assert presets.detect(controller.service.snapshot_painter_config()) == "balanced"
 
 

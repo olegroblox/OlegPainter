@@ -1,6 +1,15 @@
 """User-facing preparation steps derived from the shared application state."""
 
 
+def _stop_name(service) -> str:
+    """The stop button with its key: during a screen tool the window may be hidden."""
+    try:
+        key = service.get_hotkeys().get("global", {}).get("stop", "")
+    except Exception:
+        key = ""
+    return f"«Стоп» ({key})" if key else "«Стоп»"
+
+
 def preparation_step(state, service):
     if state.closing:
         return dict(label="Завершение работы…", action="", detail="Сохраняем настройки и освобождаем ввод.")
@@ -17,10 +26,10 @@ def preparation_step(state, service):
                     detail="Получено: " + str(state.capture.count) + ". Отмена сохраняет прежние настройки.")
     if state.desktop_mode == "measure":
         return dict(label="Измеряем палитру…", action="",
-                    detail="Дождитесь результата или нажмите «Остановить». Прежняя калибровка сохранится при отмене.")
+                    detail=f"Дождитесь результата или нажмите {_stop_name(service)}. Прежняя калибровка сохранится при отмене.")
     if state.desktop_mode:
         return dict(label="Завершите экранный инструмент", action="",
-                    detail="Подтвердите выбор на экране или нажмите «Остановить».")
+                    detail=f"Подтвердите выбор на экране или нажмите {_stop_name(service)}.")
     prep = state.preparation
     action = prep.next_action_code
     choices = {
@@ -32,6 +41,9 @@ def preparation_step(state, service):
         "calibrate_screen_palette": ("Выделить палитру", "calibrate_screen_palette"),
         "calibrate_wheel_square": ("Обвести цветовое колесо", "calibrate_wheel_square"),
         "calibrate_alpha_slider": ("Настроить непрозрачность", "calibrate_alpha_slider"),
+        "train_brush": ("Обучить кисть", "open_brush"),
+        "record_open_actions": ("Записать открытие", "record_pre_color_actions"),
+        "record_close_actions": ("Записать закрытие", "record_post_color_actions"),
     }
     if action == "calibrate_hsv_palette":
         if not service._is_valid_hsv_circle_calibration(service.engine.circle_params_calib):

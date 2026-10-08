@@ -42,8 +42,10 @@ SEARCH_SERVICES = (
          url="https://openverse.org/search/image?q={q}&size=large", kinds={}),
 )
 
-# A service without the kind filter gets these words added to the query.
-_KIND_WORDS = {"clipart": "рисунок", "lineart": "контур раскраска", "transparent": "png без фона"}
+# A service without the kind filter gets these words added to the query, in the
+# interface language: Russian words in an English search found Russian pages.
+_KIND_WORDS = {"ru": {"clipart": "рисунок", "lineart": "контур раскраска", "transparent": "png без фона"},
+               "en": {"clipart": "clipart", "lineart": "line art coloring page", "transparent": "transparent png"}}
 
 MAX_QUERY = 200
 
@@ -55,7 +57,7 @@ def service(service_id: str) -> dict:
     return found
 
 
-def search_url(service_id: str, query: str, kind: str = "any") -> str:
+def search_url(service_id: str, query: str, kind: str = "any", language: str = "ru") -> str:
     """The results page of `service_id` for `query`, large pictures of `kind`."""
     entry = service(service_id)
     if kind not in dict(KINDS):
@@ -65,7 +67,7 @@ def search_url(service_id: str, query: str, kind: str = "any") -> str:
         raise ValueError("Напишите, что хотите нарисовать.")
     suffix = entry["kinds"].get(kind, "")
     if kind != "any" and not suffix:
-        query = f"{query} {_KIND_WORDS[kind]}"
+        query = f"{query} {_KIND_WORDS.get(language, _KIND_WORDS['ru'])[kind]}"
     return entry["url"].format(q=quote_plus(query)) + suffix
 
 

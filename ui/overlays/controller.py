@@ -179,6 +179,11 @@ class DesktopOverlayController(QObject):
     def _drawing_changed(self, state):
         if str(state) in ("started", "paused"):
             self.prepare("drawing")
+            # The passive stencil left over the canvas after placing it hid the
+            # picture being drawn (live «Нарисуй меня!», 2026-10-07); F2 shows it again.
+            k = self.workspace.kalka_overlay
+            if str(state) == "started" and k is not None and k.isVisible():
+                k.hide()
         elif str(state) == "stopping" and not self._closing:
             # F4 must also cancel pickers and editors owned by Qt. Engine hooks
             # are stopped by the existing worker; do not duplicate that I/O here.

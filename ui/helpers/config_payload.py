@@ -18,8 +18,9 @@ CATEGORY_INFO = [
     },
     {
         "id": "calibration",
-        "label": "Выбор цвета",
-        "description": "Поле HEX, цветовой круг и яркость, палитра рамкой, направление круга.",
+        # It also carries the learned brush: «Выбор цвета» alone hid that (audit 2026-10-05).
+        "label": "Выбор цвета и кисть",
+        "description": "Поле HEX, цветовой круг и яркость, палитра рамкой, регулятор и обученная кисть.",
         "default": True,
     },
     {
