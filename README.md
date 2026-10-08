@@ -113,7 +113,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\dev.ps1 run
 
 - 📺 Видео-гайды: [YouTube](https://www.youtube.com/@olegroblox1)
 - 📢 Новости: [канал в Telegram](https://t.me/olegroblox1)
-- 💬 Вопросы и рисунки: [чат пользователей](https://t.me/+QDMLHcQ42L9iMzYy)
+- 💬 Вопросы и рисунки: [чат пользователей](https://t.me/+6jXaFJHQU6o4NzE6)
 - ❤️ Поддержать развитие: [Boosty](https://boosty.to/olegroblox1)
 
 Нашли ошибку? Создайте issue по шаблону и приложите файл журнала — так её найдут быстрее.
