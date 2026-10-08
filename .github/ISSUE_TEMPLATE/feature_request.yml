@@ -2,6 +2,10 @@ name: Идея
 description: Предложить новую возможность или игру
 labels: ["идея"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Идею, которую хочется сначала обсудить или проверить, нужна ли она другим, лучше предложить в [Обсуждениях → Ideas](https://github.com/olegroblox/OlegPainter/discussions/categories/ideas): там за неё голосуют 👍.
   - type: textarea
     id: problem
     attributes:
