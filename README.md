@@ -5,11 +5,19 @@
 <h1 align="center">OlegPainter</h1>
 
 <p align="center">
-  <b>Рисует любую картинку мышью — в Paint, браузерных играх и Roblox.</b><br>
+  <b>Рисует любую картинку мышью — в Roblox, Gartic Phone, Rust, Paint и любых редакторах.</b><br>
   Бесплатно и с открытым исходным кодом.
 </p>
 
 <p align="center">
+  <a href="https://github.com/olegroblox/OlegPainter/releases/latest"><img src="https://img.shields.io/badge/%E2%AC%87%20%D0%A1%D0%BA%D0%B0%D1%87%D0%B0%D1%82%D1%8C-Windows%2010%20%7C%2011-2ea043?style=for-the-badge" alt="Скачать для Windows 10 | 11"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/olegroblox/OlegPainter/releases/latest"><img src="https://img.shields.io/github/v/release/olegroblox/OlegPainter?label=%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F" alt="Последняя версия"></a>
+  <a href="https://github.com/olegroblox/OlegPainter/releases"><img src="https://img.shields.io/github/downloads/olegroblox/OlegPainter/total?label=%D1%81%D0%BA%D0%B0%D1%87%D0%B8%D0%B2%D0%B0%D0%BD%D0%B8%D0%B9" alt="Скачиваний"></a>
+  <a href="https://www.youtube.com/@olegroblox1"><img src="https://img.shields.io/badge/YouTube-%D0%B3%D0%B0%D0%B9%D0%B4%D1%8B-FF0000?logo=youtube&logoColor=white" alt="Видео-гайды"></a>
+  <a href="https://t.me/olegroblox1"><img src="https://img.shields.io/badge/Telegram-%D0%BD%D0%BE%D0%B2%D0%BE%D1%81%D1%82%D0%B8-26A5E4?logo=telegram&logoColor=white" alt="Telegram"></a>
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?logo=windows&logoColor=white" alt="Windows 10 | 11">
   <img src="https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white" alt="Python 3.13">
   <img src="https://img.shields.io/badge/Qt-Quick%20%2F%20QML-41CD52?logo=qt&logoColor=white" alt="Qt Quick">
@@ -85,7 +93,7 @@
 
 ## Установка
 
-Скачайте архив со страницы **Releases**, распакуйте в обычную папку (не в «Program Files») и запустите `OlegPainter.exe`. Для запуска из исходников нужен Python 3.13. Пошагово — в [инструкции по установке](docs/INSTALL.md).
+Скачайте `OlegPainter-…-win64.zip` со страницы [последнего выпуска](https://github.com/olegroblox/OlegPainter/releases/latest), распакуйте в обычную папку (не в «Program Files») и запустите `OlegPainter.exe`. Для запуска из исходников нужен Python 3.13. Пошагово — в [инструкции по установке](docs/INSTALL.md).
 
 > [!WARNING]
 > **Драйвер мыши Interception — сторонний.** Чтобы рисовать в играх, OlegPainter использует драйвер ввода [Interception](https://github.com/oblitum/Interception) (автор — Francisco Lopes). Он не входит в OlegPainter: мы его не разрабатываем и **не несём ответственности за его работу и ошибки**. Ставить его или нет — решаете вы: программа скачивает официальный установщик автора, проверяет его контрольную сумму и запускает только после того, как вы прочитаете предупреждения и отметите все пункты. **Игры с античитами** (Easy Anti-Cheat, Riot Vanguard, EA Javelin, FACEIT) часто работают с драйвером без проблем, но гарантий нет: античит может не пустить в игру или счесть драйвер нарушением правил — **этот риск на вас**. У драйвера бывают и серьёзные сбои, вплоть до восстановления Windows. Удалить его можно одной кнопкой на странице «Помощь». Подробности и известные случаи — в [инструкции](docs/INSTALL.md#драйвер-мыши-interception).
@@ -112,11 +120,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\dev.ps1 run
 ## Сообщество и поддержка
 
 - 📺 Видео-гайды: [YouTube](https://www.youtube.com/@olegroblox1)
+- 🗨️ Вопросы, идеи и ваши рисунки: [Обсуждения](https://github.com/olegroblox/OlegPainter/discussions)
 - 📢 Новости: [канал в Telegram](https://t.me/olegroblox1)
-- 💬 Вопросы и рисунки: [чат пользователей](https://t.me/+6jXaFJHQU6o4NzE6)
+- 💬 Быстрые вопросы: [чат пользователей](https://t.me/+6jXaFJHQU6o4NzE6)
 - ❤️ Поддержать развитие: [Boosty](https://boosty.to/olegroblox1)
 
-Нашли ошибку? Создайте issue по шаблону и приложите файл журнала — так её найдут быстрее.
+Нашли ошибку? [Создайте issue](https://github.com/olegroblox/OlegPainter/issues/new/choose) по шаблону и приложите файл журнала — так её найдут быстрее. Понравилась программа — поставьте ⭐ репозиторию, так её проще найти другим.
+
+Общаемся по [правилам](CODE_OF_CONDUCT.md).
 
 ## Лицензия
 
