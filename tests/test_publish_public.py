@@ -4,6 +4,7 @@ import subprocess
 import pytest
 
 from tools.publish_public import changes, check_author, mirror
+from tools.export_public import public_files, problems
 
 
 def git(repo, *args):
@@ -61,3 +62,28 @@ def test_commits_need_the_github_no_reply_address(repo):
     git(repo, "config", "user.email", "person@example.com")
     with pytest.raises(RuntimeError, match="скрытая почта"):
         check_author(repo)
+
+
+def test_ci_files_are_included_in_the_public_export():
+    # Catch an ignore rule or privacy filter that would silently remove CI on publish.
+    required = {".github/workflows/ci.yml", ".python-version", "dev.ps1", "pytest.ini",
+                "requirements-dev.lock.txt", "tests/test_publish_public.py", "docs/DEVELOPMENT.md"}
+    files = public_files()
+    assert required <= set(files)
+    assert problems(sorted(required)) == []
+
+
+def test_source_workflow_survives_repeated_public_mirroring(tmp_path, repo):
+    source = tmp_path / "source"
+    workflow = ".github/workflows/ci.yml"
+    (source / ".github" / "workflows").mkdir(parents=True)
+    (source / workflow).write_text("name: CI\n", encoding="utf-8")
+    (source / ".gitignore").write_bytes((repo / ".gitignore").read_bytes())
+    # A public-only workflow is not the source of truth.
+    (repo / ".github" / "workflows").mkdir(parents=True)
+    (repo / ".github" / "workflows" / "public-only.yml").write_text("name: stray\n", encoding="utf-8")
+
+    for _ in range(2):
+        mirror(source, [".gitignore", workflow], repo)
+        assert (repo / workflow).read_bytes() == (source / workflow).read_bytes()
+        assert not (repo / ".github" / "workflows" / "public-only.yml").exists()
